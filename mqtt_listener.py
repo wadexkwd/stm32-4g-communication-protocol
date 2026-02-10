@@ -25,7 +25,7 @@ MQTT_BROKER = "120.27.250.30"  # MQTT服务器地址
 MQTT_PORT = 1883  # MQTT端口
 MQTT_USERNAME = ""  # MQTT用户名（不需要认证）
 MQTT_PASSWORD = ""  # MQTT密码（不需要认证）
-IMEI = "861197065268692"  # 设备IMEI号
+IMEI = "862701086120524"  # 设备IMEI号
 MQTT_TOPIC = f"up/{IMEI}"  # 订阅的主题
 CLIENT_ID = f"windows_listener_{IMEI}"  # 客户端ID，确保唯一性
 EXCEL_FILE = "sensor_data.xlsx"  # 输出的Excel文件名
@@ -320,8 +320,28 @@ def on_disconnect(client, userdata, rc, properties, reason_code):
 
 def on_log(client, userdata, level, buf):
     """日志回调函数（可选）"""
-    # 可以在这里添加详细的日志记录
-    # print(f"📝 日志: {buf}")
+    # 添加详细的日志记录以帮助排查问题
+    if level == mqtt.MQTT_LOG_WARNING:
+        print(f"⚠️ 警告: {buf}")
+    elif level == mqtt.MQTT_LOG_ERROR:
+        print(f"❌ 错误: {buf}")
+    elif level == mqtt.MQTT_LOG_INFO:
+        print(f"ℹ️ 信息: {buf}")
+
+def on_socket_open(client, userdata, sock):
+    """socket 打开回调"""
+    print("🔌 Socket连接成功")
+
+def on_socket_close(client, userdata, sock):
+    """socket 关闭回调"""
+    print("🔌 Socket连接关闭")
+
+def on_socket_register_write(client, userdata, sock):
+    """socket 写入就绪回调"""
+    pass
+
+def on_socket_unregister_write(client, userdata, sock):
+    """socket 取消写入就绪回调"""
     pass
 
 # =============================================================================
@@ -354,14 +374,16 @@ def main():
     if MQTT_USERNAME:
         client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
     
-    # 设置连接参数
-    client.reconnect_delay_set(min_delay=1, max_delay=60)
-    client.keepalive = 120  # 心跳间隔
+    # 设置连接参数 - 优化稳定性
+    client.reconnect_delay_set(min_delay=5, max_delay=300)  # 更保守的重连策略
+    client.keepalive = 120  # 增加心跳间隔，减少网络波动影响
+    client.max_queued_messages_set(1000)  # 增加消息队列大小
+    client.connect_timeout = 60  # 增加连接超时时间
     
     # 连接到MQTT服务器
-    try:
+    try: 
         print("📡 正在连接到MQTT服务器...")
-        client.connect(MQTT_BROKER, MQTT_PORT)
+        client.connect_async(MQTT_BROKER, MQTT_PORT, keepalive=120)
     except Exception as e:
         print(f"❌ 连接失败: {e}")
         return
@@ -370,7 +392,8 @@ def main():
     try:
         print("\n🚀 开始监听消息（按 Ctrl+C 停止）")
         print("-" * 60)
-        client.loop_forever()
+        # 使用 loop_forever 并配置自动重连
+        client.loop_forever(retry_first_connection=True)
     except KeyboardInterrupt:
         print("\n\n🛑 用户中断")
     except Exception as e:

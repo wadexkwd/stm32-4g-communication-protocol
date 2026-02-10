@@ -505,7 +505,11 @@ class MyMQTTClient:
                 sensor_data['version'] = APP_VERSION
                 data_with_version.append(sensor_data)
                 
-            payload = ujson.dumps(data_with_version)
+            payload = ujson.dumps({
+                'event': 'SENSOR_DATA',
+                'data': data_with_version,
+                'version': APP_VERSION
+            })
             self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
             print("已发布上行传感器数据，共 %d 个样本，主题: %s" % (len(data_with_version), self.topic_up))
             return True
@@ -516,7 +520,11 @@ class MyMQTTClient:
             if self._attempt_reconnect():
                 # 重连成功后再次尝试发布
                 try:
-                    payload = ujson.dumps(data_with_version)
+                    payload = ujson.dumps({
+                        'event': 'SENSOR_DATA',
+                        'data': data_with_version,
+                        'version': APP_VERSION
+                    })
                     self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
                     print("重连后发布成功，共 %d 个样本，主题: %s" % (len(data_with_version), self.topic_up))
                     return True
@@ -531,7 +539,7 @@ class MyMQTTClient:
             return False
 
         try:
-            payload = ujson.dumps({'status': status, 'version': APP_VERSION})
+            payload = ujson.dumps({'status': status, 'version': APP_VERSION, 'event': 'HEARTBEAT'})
             self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
             print("已发布上行心跳包，状态: %d，主题: %s" % (status, self.topic_up))
             return True
@@ -542,7 +550,7 @@ class MyMQTTClient:
             if self._attempt_reconnect():
                 # 重连成功后再次尝试发布
                 try:
-                    payload = ujson.dumps({'status': status, 'version': APP_VERSION})
+                    payload = ujson.dumps({'status': status, 'version': APP_VERSION, 'event': 'HEARTBEAT'})
                     self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
                     print("重连后发布成功，状态: %d，主题: %s" % (status, self.topic_up))
                     return True
@@ -559,6 +567,7 @@ class MyMQTTClient:
         try:
             config_with_version = config.copy()
             config_with_version['version'] = APP_VERSION
+            config_with_version['event'] = 'CONFIG_REPLY'
             payload = ujson.dumps(config_with_version)
             self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
             print("已发布上行配置参数回复，配置: %s，主题: %s" % (str(config_with_version), self.topic_up))
@@ -572,6 +581,7 @@ class MyMQTTClient:
                 try:
                     config_with_version = config.copy()
                     config_with_version['version'] = APP_VERSION
+                    config_with_version['event'] = 'CONFIG_REPLY'
                     payload = ujson.dumps(config_with_version)
                     self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
                     print("重连后发布成功，配置: %s，主题: %s" % (str(config_with_version), self.topic_up))
@@ -587,7 +597,7 @@ class MyMQTTClient:
             return False
 
         try:
-            payload = ujson.dumps({'reset_status': reset_status, 'version': APP_VERSION})
+            payload = ujson.dumps({'reset_status': reset_status, 'version': APP_VERSION, 'event': 'RESET_REPLY'})
             self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
             print("已发布上行复位命令回复，状态: %d，主题: %s" % (reset_status, self.topic_up))
             return True
@@ -598,7 +608,7 @@ class MyMQTTClient:
             if self._attempt_reconnect():
                 # 重连成功后再次尝试发布
                 try:
-                    payload = ujson.dumps({'reset_status': reset_status, 'version': APP_VERSION})
+                    payload = ujson.dumps({'reset_status': reset_status, 'version': APP_VERSION, 'event': 'RESET_REPLY'})
                     self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
                     print("重连后发布成功，状态: %d，主题: %s" % (reset_status, self.topic_up))
                     return True
@@ -607,14 +617,14 @@ class MyMQTTClient:
                     self.is_connected = False
             return False
             
-    def format_timestamp(self, timestamp):
+    def format_timestamp(self, timestamp=None):
         """将时间戳格式化为 yyyy-mm-dd hh:mm:ss 格式的字符串"""
         try:
-            # 转换为本地时间结构体
-            t = utime.localtime(timestamp)
-            # 格式化字符串
+            # 直接从 RTC 读取当前时间（更准确）
+            rtc_time = rtc.datetime()
             return "{:04d}-{:02d}-{:02d} {:02d}:{:02d}:{:02d}".format(
-                t[0], t[1], t[2], t[3], t[4], t[5]
+                rtc_time[0], rtc_time[1], rtc_time[2], 
+                rtc_time[4], rtc_time[5], rtc_time[6]
             )
         except Exception as e:
             print("时间格式化失败: %s" % e)
@@ -627,7 +637,7 @@ class MyMQTTClient:
 
         try:
             payload = ujson.dumps({
-                'event_type': event_type,
+                'event': event_type,
                 'description': description,
                 'timestamp': self.format_timestamp(utime.time()),
                 'version': APP_VERSION
@@ -643,7 +653,7 @@ class MyMQTTClient:
                 # 重连成功后再次尝试发布
                 try:
                     payload = ujson.dumps({
-                        'event_type': event_type,
+                        'event': event_type,
                         'description': description,
                         'timestamp': self.format_timestamp(utime.time()),
                         'version': APP_VERSION
@@ -663,9 +673,10 @@ class MyMQTTClient:
 
         try:
             payload = ujson.dumps({
-                'event': 'power on',
+                'event': 'POWER_ON',
                 'timestamp': self.format_timestamp(utime.time()),
-                'version': APP_VERSION
+                'version': APP_VERSION,
+                'imei': self.imei
             })
             self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
             print("已发布上电事件，主题: %s" % self.topic_up)
@@ -678,9 +689,10 @@ class MyMQTTClient:
                 # 重连成功后再次尝试发布
                 try:
                     payload = ujson.dumps({
-                        'event': 'power on',
+                        'event': 'POWER_ON',
                         'timestamp': self.format_timestamp(utime.time()),
-                        'version': APP_VERSION
+                        'version': APP_VERSION,
+                        'imei': self.imei
                     })
                     self.client.publish(self.topic_up.encode('utf-8'), payload.encode('utf-8'), qos=0)
                     print("重连后发布成功，主题: %s" % self.topic_up)
@@ -893,44 +905,71 @@ def main():
     except Exception as e:
             print("获取网络信息失败: %s" % e)
     
-    # 从基站获取时间并更新 RTC（简化版本）
+    # 从基站获取时间并更新 RTC（增加超时机制）
     print("\n4 - 正在从基站获取时间...")
-    try:
-        nt_result = net.nitzTime()
-        
-        if isinstance(nt_result, tuple) and len(nt_result) > 0:
-            time_str = nt_result[0]
-            if time_str.strip() != "":
-                date_str, time_str, tz_str, _ = time_str.split()
+    time_sync_success = False
+    time_sync_timeout = 30  # 时间同步超时时间（秒）
+    start_sync_time = utime.time()
+    
+    while utime.time() - start_sync_time < time_sync_timeout:
+        try:
+            nt_result = net.nitzTime()
+            print("net.nitzTime() 返回值:", nt_result)  # 打印原始返回值，用于调试
+            
+            if isinstance(nt_result, tuple) and len(nt_result) > 0:
+                time_str = nt_result[0]
+                print("解析到的时间字符串:", repr(time_str))  # 打印原始时间字符串，用于调试
                 
-                year = int(date_str[0:2]) + 2000
-                month = int(date_str[3:5])
-                day = int(date_str[-2:])
-                
-                hour = int(time_str[0:2])
-                minute = int(time_str[3:5])
-                second = int(time_str[-2:])
-                
-                timezone_offset = int(tz_str)
-                hour += timezone_offset
-                
-                week = 0
-                microsecond = 0
-                
-                if year != 2000:
-                    ret = rtc.datetime([year, month, day, week, hour, minute, second, microsecond])
-                    if ret == 0:
-                        print("时间同步成功")
+                if time_str.strip() != "":
+                    date_str, time_str, tz_str, _ = time_str.split()
+                    
+                    year = int(date_str[0:2]) + 2000
+                    month = int(date_str[3:5])
+                    day = int(date_str[-2:])
+                    
+                    hour = int(time_str[0:2])
+                    minute = int(time_str[3:5])
+                    second = int(time_str[-2:])
+                    
+                    timezone_offset = int(tz_str)
+                    hour += timezone_offset
+                    
+                    week = 0
+                    microsecond = 0
+                    
+                    if year != 2000:
+                        ret = rtc.datetime([year, month, day, week, hour, minute, second, microsecond])
+                        if ret == 0:
+                            # 打印获取到的时间
+                            print("时间同步成功，获取到的时间: %04d-%02d-%02d %02d:%02d:%02d" % (year, month, day, hour, minute, second))
+                            time_sync_success = True
+                            break
+                        else:
+                            print("时间同步失败，重试中...")
                     else:
-                        print("时间同步失败")
+                        print("时间错误，重试中...")
                 else:
-                    print("时间错误")
+                    print("时间字符串为空，重试中...")
             else:
-                print("时间字符串为空")
-        else:
-            print("获取基站时间失败")
+                print("获取基站时间失败，重试中...")
+                
+            utime.sleep(2)  # 等待2秒后重试
+        except Exception as e:
+            print("获取时间失败: %s，重试中..." % e)
+            utime.sleep(2)
+    
+    if not time_sync_success:
+        print("时间同步超时（%d秒），使用默认时间" % time_sync_timeout)
+        
+    # 打印当前RTC时间，验证同步结果
+    try:
+        current_time = rtc.datetime()
+        print("当前RTC时间: %04d-%02d-%02d %02d:%02d:%02d" % (
+            current_time[0], current_time[1], current_time[2],
+            current_time[4], current_time[5], current_time[6]
+        ))
     except Exception as e:
-        print("获取时间失败: %s" % e)
+        print("读取RTC时间失败: %s" % e)
     
     print("=" * 50)
     
@@ -1030,7 +1069,7 @@ def main():
                 if not timeout_event_reported:
                     print("STM32数据超时，上报异常事件")
                     mqtt_client.publish_up_exception_event(
-                        event_type="STM32_COMMUNICATION_TIMEOUT",
+                        event_type="SENSOR_REPORT_TIMEOUT",
                         description="超过%d秒未收到STM32数据" % STM32_TIMEOUT_INTERVAL
                     )
                     timeout_event_reported = True

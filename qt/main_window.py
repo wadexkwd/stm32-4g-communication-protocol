@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
         # 标签页控件
         self.tab_widget = QTabWidget()
         
-                # 数据总览标签页
+        # 数据总览标签页
         overview_tab = QWidget()
         overview_layout = QVBoxLayout(overview_tab)
         
@@ -1228,7 +1228,6 @@ class MainWindow(QMainWindow):
         self.db_manager.save_data(data_list, current_imei)
         
         # 更新数据总览表
-        # 更新数据总览表
         for data in data_list:
             row = self.overview_table.rowCount()
             self.overview_table.insertRow(row)
@@ -1414,7 +1413,6 @@ class MainWindow(QMainWindow):
         if data_list:
             last_row = self.overview_table.rowCount() - 1
             self.overview_table.scrollToItem(self.overview_table.item(last_row, 0))
-    
     
     def adjust_accel_y_axis_range(self):
         """根据当前X轴范围内的加速度数据动态调整Y轴范围"""
@@ -1911,8 +1909,6 @@ class MainWindow(QMainWindow):
             points_to_remove = list(range(series.count() - max_points))
             for i in reversed(points_to_remove):
                 series.remove(i)
-    
-    # 移除不再需要的scroll_charts方法，因为图表现在会在数据更新时自动平移
     
     def adjust_columns_to_fill_space(self):
         """调整列宽以填充剩余空间"""

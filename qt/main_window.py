@@ -22,6 +22,7 @@ from PySide6.QtCore import Qt, QTimer, QDateTime, QUrl
 from PySide6.QtGui import QFont, QColor, QPainter, QIcon, QPixmap
 from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWebEngineCore import QWebEnginePage
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 
@@ -575,33 +576,413 @@ class MainWindow(QMainWindow):
                 
                 category_layout.addLayout(field_layout)
             elif category == "位置":
-                # 位置标签页：仅显示经纬度值
-                # 参数显示区域：名称+固定文本框，平均划分宽度
-                field_layout = QHBoxLayout()
-                for field in fields:
-                    field_widget = QWidget()
-                    field_v_layout = QVBoxLayout(field_widget)
-                    
-                    # 名称标签
-                    name_label = QLabel(f"{FIELD_NAMES[field]}")
-                    name_label.setAlignment(Qt.AlignCenter)
-                    name_label.setStyleSheet("font-size: 14px; font-weight: bold;")
-                    
-                    # 值显示文本框
-                    value_label = QLabel("-")
-                    value_label.setAlignment(Qt.AlignCenter)
-                    value_label.setStyleSheet("font-size: 20px; font-weight: bold; color: #0066cc; border: 1px solid #ccc; padding: 8px; border-radius: 4px;")
-                    value_label.setMinimumHeight(50)
-                    
-                    field_v_layout.addWidget(name_label)
-                    field_v_layout.addWidget(value_label)
-                    
-                    field_layout.addWidget(field_widget)
-                    
-                    # 保存引用
-                    setattr(self, f"{field}_label", value_label)
+                # 位置标签页：显示地图和经纬度值
+                # 地图和参数显示布局
+                map_layout = QVBoxLayout()
                 
-                category_layout.addLayout(field_layout)
+                # 地图显示区域
+                self.map_view = QWebEngineView()
+                
+                # 自定义页面以捕获JavaScript控制台输出
+                class MapWebEnginePage(QWebEnginePage):
+                    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+                        level_str = str(level)
+                        print(f"[Map JS] {level_str} (line {line_number}): {message}")
+                
+                self.map_view.setPage(MapWebEnginePage())
+                
+                # 加载高德地图
+                map_html = """
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>位置地图</title>
+    <style>
+        body { margin: 0; padding: 0; height: 100vh; background-color: #f0f0f0; }
+        #map { 
+            width: 100%; 
+            height: 100%; 
+            position: relative;
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .status.success { color: green; }
+        .status.error { color: red; }
+        .status.loading { color: orange; }
+        .location-log {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            max-width: 300px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .location-log h4 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
+        .location-log .entry {
+            margin: 5px 0;
+            color: #666;
+            border-left: 3px solid #007bff;
+            padding-left: 8px;
+        }
+        .location-log .entry .time {
+            font-size: 10px;
+            color: #999;
+        }
+        .current-location {
+            position: absolute;
+            background: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            font-weight: bold;
+            color: #007bff;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            white-space: nowrap;
+            border: 2px solid #007bff;
+        }
+    </style>
+    
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: "dd1127e11e1f2d5504a2f2ec9824eb78"
+        };
+    </script>
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2"></script>
+</head>
+<body>
+    <div id="map">
+        <div class="status loading" id="status">
+            <strong>地图加载中...</strong><br>
+            <small>正在加载地图资源...</small>
+        </div>
+        <div class="location-log" id="locationLog">
+            <h4>最近位置更新</h4>
+        </div>
+        <div class="current-location" id="currentLocation">
+            位置: 39.90923, 116.397428
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        console.log('Map script loaded');
+        
+        let map;
+        let marker;
+        let label; // 坐标标签
+        let locationLog = [];
+        let lastLocation = null; // 保存上一次坐标
+        let apiCallCount = 0; // API调用计数器
+        let apiCallStartDate = new Date().toDateString(); // API调用开始日期
+        
+        // 地球半径，用于计算距离
+        const EARTH_RADIUS = 6371000;
+        
+        function log(msg, isError) {
+            const statusDiv = document.getElementById('status');
+            const color = isError ? 'red' : 'green';
+            statusDiv.innerHTML += `[${new Date().toLocaleTimeString()}] <span style="color:${color}">${msg}</span>\\n`;
+            console.log(msg);
+        }
+        
+        function addLocationLog(latitude, longitude) {
+            const logEntry = {
+                time: new Date().toLocaleTimeString(),
+                latitude: latitude,
+                longitude: longitude
+            };
+            
+            locationLog.unshift(logEntry);
+            
+            // 只保留最近3条记录
+            if (locationLog.length > 3) {
+                locationLog.pop();
+            }
+            
+            // 更新日志显示
+            const logDiv = document.getElementById('locationLog');
+            const entriesDiv = logDiv.querySelector('.entries') || document.createElement('div');
+            entriesDiv.className = 'entries';
+            entriesDiv.innerHTML = '';
+            
+            locationLog.forEach(entry => {
+                const entryDiv = document.createElement('div');
+                entryDiv.className = 'entry';
+                entryDiv.innerHTML = `
+                    <span class="time">[${entry.time}]</span><br>
+                    ${entry.latitude.toFixed(6)}, ${entry.longitude.toFixed(6)}
+                `;
+                entriesDiv.appendChild(entryDiv);
+            });
+            
+            // 确保entriesDiv在logDiv中
+            if (!logDiv.contains(entriesDiv)) {
+                logDiv.appendChild(entriesDiv);
+            }
+        }
+        
+        // 计算两个坐标之间的距离（米）
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                     Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            
+            return EARTH_RADIUS * c;
+        }
+        
+        // 检查API调用限制
+        function checkApiCallLimit() {
+            const today = new Date().toDateString();
+            
+            // 如果日期不同，重置计数器
+            if (today !== apiCallStartDate) {
+                apiCallCount = 0;
+                apiCallStartDate = today;
+                console.log('API调用计数器已重置（新日期）');
+            }
+            
+            // 检查是否超过限制
+            return apiCallCount >= 1000;
+        }
+        
+        // 增加API调用计数
+        function incrementApiCallCount() {
+            apiCallCount++;
+            console.log(`API调用计数: ${apiCallCount}/1000 (${apiCallStartDate})`);
+        }
+        
+        // 显示API调用限制信息
+        function showApiLimitInfo() {
+            const locationLogDiv = document.getElementById('locationLog');
+            const limitDiv = locationLogDiv.querySelector('.api-limit-info') || document.createElement('div');
+            limitDiv.className = 'api-limit-info';
+            limitDiv.innerHTML = `
+                <div style="background: #ffcc00; color: #000; padding: 5px; margin: 5px 0; border-radius: 4px; font-weight: bold; font-size: 11px;">
+                    ⚠️ API调用次数超出限制 (${apiCallCount}/1000次)
+                </div>
+            `;
+            
+            // 将限制信息添加到日志顶部
+            if (!locationLogDiv.contains(limitDiv)) {
+                const entriesDiv = locationLogDiv.querySelector('.entries');
+                if (entriesDiv) {
+                    locationLogDiv.insertBefore(limitDiv, entriesDiv);
+                } else {
+                    locationLogDiv.appendChild(limitDiv);
+                }
+            }
+        }
+        
+        function initMap() {
+            console.log('Initializing map');
+            
+            try {
+                map = new AMap.Map('map', {
+                    zoom: 13,
+                    center: [116.397428, 39.90923],
+                    viewMode: '2D',
+                    mapStyle: 'amap://styles/normal'
+                });
+                
+                log('✅ Map created successfully');
+                
+                // 添加地图控件（使用正确的方式）
+                try {
+                    if (typeof AMap.Scale === 'function') {
+                        map.addControl(new AMap.Scale({}));
+                    }
+                    if (typeof AMap.ToolBar === 'function') {
+                        map.addControl(new AMap.ToolBar({}));
+                    }
+                    if (typeof AMap.MapType === 'function') {
+                        map.addControl(new AMap.MapType({}));
+                    }
+                } catch (e) {
+                    console.log('地图控件加载失败:', e);
+                }
+                
+                // 创建圆形标记
+                marker = new AMap.CircleMarker({
+                    center: [116.397428, 39.90923],
+                    radius: 8,
+                    strokeColor: '#007bff',
+                    strokeWeight: 2,
+                    fillColor: '#ffffff',
+                    fillOpacity: 0.8,
+                    map: map
+                });
+                
+                // 创建坐标信息标签
+                label = new AMap.Text({
+                    text: '39.90923, 116.397428',
+                    anchor: 'bottom-left',
+                    style: {
+                        'background-color': 'white',
+                        'border': '1px solid #007bff',
+                        'padding': '4px 8px',
+                        'border-radius': '4px',
+                        'font-size': '12px',
+                        'color': '#007bff',
+                        'font-weight': 'bold',
+                        'white-space': 'nowrap'
+                    },
+                    position: [116.397428, 39.90923],
+                    map: map
+                });
+                
+                // 保存初始位置
+                lastLocation = { latitude: 39.90923, longitude: 116.397428 };
+                
+                document.getElementById('status').className = 'status success';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载成功!</strong><br>
+                    <small>高德地图API已准备好</small>
+                `;
+                
+            } catch (error) {
+                console.error('Map initialization error:', error);
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载失败!</strong><br>
+                    <small>错误: ${error.message}</small>
+                `;
+            }
+        }
+        
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded');
+            
+            if (typeof AMap !== 'undefined') {
+                initMap();
+            } else {
+                log('❌ AMap API not loaded', true);
+            }
+        });
+        
+        // 更新地图位置的函数
+        window.updateLocation = function(latitude, longitude) {
+            console.log(`Updating location: lat=${latitude}, lon=${longitude}`);
+            
+            if (map && latitude && longitude) {
+                try {
+                    // 检查API调用限制
+                    if (checkApiCallLimit()) {
+                        console.log('API调用次数已超出每日限制');
+                        showApiLimitInfo();
+                        return;
+                    }
+                    
+                    // 检查距离是否小于50米
+                    if (lastLocation) {
+                        const distance = calculateDistance(lastLocation.latitude, lastLocation.longitude, latitude, longitude);
+                        if (distance < 50) {
+                            console.log(`距离较近 (${distance.toFixed(1)}米 < 50米)，不刷新位置`);
+                            return;
+                        }
+                    }
+                    
+                    // 移除旧标记
+                    if (marker) {
+                        map.remove(marker);
+                    }
+                    
+                    // 移动地图到新位置
+                    map.setZoomAndCenter(15, [longitude, latitude]);
+                    
+                    // 创建新的圆形标记
+                    marker = new AMap.CircleMarker({
+                        center: [longitude, latitude],
+                        radius: 8,
+                        strokeColor: '#007bff',
+                        strokeWeight: 2,
+                        fillColor: '#ffffff',
+                        fillOpacity: 0.8,
+                        map: map
+                    });
+                    
+                    // 更新坐标标签
+                    if (label) {
+                        map.remove(label);
+                    }
+                    label = new AMap.Text({
+                        text: `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+                        anchor: 'bottom-left',
+                        style: {
+                            'background-color': 'white',
+                            'border': '1px solid #007bff',
+                            'padding': '4px 8px',
+                            'border-radius': '4px',
+                            'font-size': '12px',
+                            'color': '#007bff',
+                            'font-weight': 'bold',
+                            'white-space': 'nowrap'
+                        },
+                        position: [longitude, latitude],
+                        map: map
+                    });
+                    
+                    // 更新当前位置显示，使其跟随标记
+                    const pixelPosition = map.lngLatToContainer([longitude, latitude]);
+                    const locationDiv = document.getElementById('currentLocation');
+                    locationDiv.textContent = `位置: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+                    locationDiv.style.left = pixelPosition.x + 'px';
+                    locationDiv.style.top = (pixelPosition.y - 40) + 'px';
+                    locationDiv.style.transform = 'translate(-50%, 0)';
+                    
+                    // 添加到位置更新日志
+                    addLocationLog(latitude, longitude);
+                    
+                    // 更新上一次位置
+                    lastLocation = { latitude, longitude };
+                    
+                    // 增加API调用计数
+                    incrementApiCallCount();
+                    
+                } catch (error) {
+                    console.error('Update location error:', error);
+                    log(`❌ Error updating location: ${error.message}`, true);
+                }
+            }
+        };
+    </script>
+</body>
+</html>
+                """.strip()
+                
+                self.map_view.setHtml(map_html)
+                self.map_view.setMinimumHeight(400)
+                map_layout.addWidget(self.map_view)
+                
+                category_layout.addLayout(map_layout)
             else:
                 # 其他分类继续使用原来的布局
                 for field in fields:
@@ -885,6 +1266,10 @@ class MainWindow(QMainWindow):
             for category, fields in FIELD_CATEGORIES.items():
                 # 对所有分类（包括加速度、角速度、角度、姿态、环境）都使用单独的字段标签
                 for field in fields:
+                    # 跳过经纬度字段，因为这些信息已在地图上显示
+                    if field in ['longitude', 'latitude']:
+                        continue
+                        
                     if field in last_data:
                         try:
                             label = getattr(self, f"{field}_label")
@@ -895,15 +1280,23 @@ class MainWindow(QMainWindow):
                             # 格式化显示
                             if field in ['pressure']:
                                 label.setText(f"{value:.2f}")
-                            elif field in ['longitude', 'latitude']:
-                                # 经纬度字段保留6位小数精度
-                                label.setText(f"{value:.6f}")
                             else:
                                 label.setText(f"{value:.0f}")
                         except (ValueError, KeyError, AttributeError) as e:
                             print(f"更新字段 {field} 标签时出错: {e}")
             
-            # 地图展示功能已关闭，无需处理地图更新
+            # 更新地图位置
+            if hasattr(self, 'map_view') and 'latitude' in last_data and 'longitude' in last_data:
+                try:
+                    latitude = float(last_data['latitude'])
+                    longitude = float(last_data['longitude'])
+                    # 检查是否是有效的经纬度（合理范围）
+                    if -90 <= latitude <= 90 and -180 <= longitude <= 180 and latitude != 0 and longitude != 0:
+                        js_code = f"window.updateLocation({latitude}, {longitude})"
+                        self.map_view.page().runJavaScript(js_code)
+                        # 不再打印坐标更新信息，避免屏幕被占满
+                except (ValueError, KeyError) as e:
+                    print(f"更新地图位置时出错: {e}")
         
         # 设置图表显示的时间范围（10秒）
         display_duration = 10  # 10秒

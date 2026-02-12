@@ -12,7 +12,7 @@ import os
 # 添加当前目录到模块搜索路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from main import (
+from device.main import (
     STM32Communication,
     MQTTClient,
     Watchdog

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>高德地图测试</title>
+    <style>
+        body { margin: 0; padding: 0; height: 100vh; background-color: #f0f0f0; }
+        #map { 
+            width: 100%; 
+            height: 100%; 
+            position: relative;
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .status.success { color: green; }
+        .status.error { color: red; }
+        .status.loading { color: orange; }
+        .test-button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .test-button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div id="map">
+        <div class="status loading" id="status">
+            <strong>地图加载中...</strong><br>
+            <small>正在加载高德地图 API...</small><br>
+            <button class="test-button" onclick="testClick()">测试按钮</button>
+        </div>
+    </div>
+
+    <!-- 引入高德地图 JavaScript API -->
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: 'dd1127e11e1f2d5504a2f2ec9824eb78'
+        }
+    </script>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2&callback=initMap"></script>
+
+    <script>
+        // 地图初始化
+        let map;
+
+        function initMap() {
+            console.log('高德地图 API 加载成功');
+            
+            try {
+                // 初始化高德地图
+                map = new AMap.Map('map', {
+                    resizeEnable: true,
+                    zoom: 13,
+                    center: [116.397428, 39.90923],
+                    viewMode: '3D'
+                });
+                
+                console.log('地图初始化成功');
+                
+                // 添加控件
+                map.addControl(new AMap.Scale());
+                map.addControl(new AMap.ToolBar());
+                map.addControl(new AMap.OverView({isOpen:true}));
+                
+                // 添加标记
+                const marker = new AMap.Marker({
+                    position: [116.397428, 39.90923],
+                    title: '天安门',
+                    content: '<div style="width:20px;height:20px;background-color:red;border-radius:50%;"></div>',
+                    map: map
+                });
+                
+                marker.on('click', function() {
+                    alert('天安门');
+                });
+                
+                // 地图加载成功
+                document.getElementById('status').className = 'status success';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载成功!</strong><br>
+                    <small>高德地图已准备好</small><br>
+                    <button class="test-button" onclick="testClick()">测试按钮</button>
+                `;
+                
+                console.log('地图加载完成');
+                
+            } catch (error) {
+                console.error('地图初始化失败:', error);
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载失败!</strong><br>
+                    <small>错误: ${error.message}</small><br>
+                    <button class="test-button" onclick="location.reload()">重新加载</button>
+                `;
+            }
+        }
+
+        window.onload = function() {
+            console.log('页面加载完成');
+            
+            // 检查地图 API 是否加载成功
+            if (typeof AMap === 'undefined') {
+                console.warn('AMap 全局变量未定义，等待 API 加载');
+                
+                // 超时检查
+                setTimeout(() => {
+                    if (typeof AMap === 'undefined') {
+                        console.error('地图 API 加载超时');
+                        document.getElementById('status').className = 'status error';
+                        document.getElementById('status').innerHTML = `
+                            <strong>地图加载失败!</strong><br>
+                            <small>API 加载超时，请检查网络连接</small><br>
+                            <button class="test-button" onclick="location.reload()">重新加载</button>
+                        `;
+                    }
+                }, 5000);
+            }
+        };
+
+        function testClick() {
+            alert('按钮点击事件正常工作!');
+            console.log('按钮被点击');
+        }
+
+        // 检查页面可见性和大小
+        setInterval(() => {
+            const mapDiv = document.getElementById('map');
+            const rect = mapDiv.getBoundingClientRect();
+            console.log('地图容器尺寸:', rect.width, 'x', rect.height);
+            console.log('页面可见性:', document.hidden ? '隐藏' : '可见');
+            if (map) {
+                console.log('地图中心:', map.getCenter());
+                console.log('地图缩放:', map.getZoom());
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

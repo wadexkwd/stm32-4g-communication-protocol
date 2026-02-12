@@ -12,7 +12,7 @@ sys.path.append('.')
 
 # 尝试导入 main.py 中的类
 try:
-    from main import STM32Communication
+    from device.main import STM32Communication
     print("✅ 成功导入 STM32Communication 类")
 except Exception as e:
     print("❌ 导入失败:", e)

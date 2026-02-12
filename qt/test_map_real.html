@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>真实地图测试</title>
+    <link rel="stylesheet" href="leaflet/leaflet.css">
+    <style>
+        body { margin: 0; padding: 0; height: 100vh; background-color: #f0f0f0; }
+        #map { 
+            width: 100%; 
+            height: 100%; 
+            position: relative;
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            max-width: 300px;
+        }
+        .status.success { color: green; }
+        .status.error { color: red; }
+        .status.loading { color: orange; }
+        .test-button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+        }
+        .test-button:hover { background: #0056b3; }
+        .coordinates {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="map">
+        <div class="status loading" id="status">
+            <strong>地图加载中...</strong><br>
+            <small>正在加载 Leaflet 地图库</small><br>
+            <button class="test-button" onclick="testClick()">测试按钮</button>
+        </div>
+    </div>
+
+    <script src="leaflet/leaflet.js"></script>
+    <script>
+        // Leaflet 地图初始化
+        let map;
+        let marker;
+
+        window.onload = function() {
+            console.log('页面加载完成，开始初始化地图');
+            
+            try {
+                // 初始化地图
+                map = L.map('map').setView([39.9042, 116.4074], 13);
+                console.log('地图容器初始化成功');
+                
+                // 添加 TileLayer（使用 OpenStreetMap）
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    maxZoom: 19
+                }).addTo(map);
+                console.log('TileLayer 添加成功');
+                
+                // 添加标记
+                marker = L.marker([39.9042, 116.4074]).addTo(map);
+                marker.bindPopup('<b>北京天安门</b><br>这是一个示例标记.').openPopup();
+                console.log('标记添加成功');
+                
+                // 地图点击事件
+                map.on('click', function(e) {
+                    console.log('地图被点击:', e.latlng);
+                    alert(`地图被点击: \n纬度: ${e.latlng.lat.toFixed(4)}\n经度: ${e.latlng.lng.toFixed(4)}`);
+                });
+                
+                // 更新状态
+                document.getElementById('status').className = 'status success';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载成功!</strong><br>
+                    <small>Leaflet 地图已准备好</small><br>
+                    <button class="test-button" onclick="testClick()">测试按钮</button>
+                    <div class="coordinates">
+                        当前位置: ${map.getCenter().lat.toFixed(4)}, ${map.getCenter().lng.toFixed(4)}<br>
+                        缩放级别: ${map.getZoom()}
+                    </div>
+                `;
+                
+                console.log('地图初始化完成');
+            } catch (error) {
+                console.error('地图初始化失败:', error);
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载失败!</strong><br>
+                    <small>错误: ${error.message}</small><br>
+                    <button class="test-button" onclick="location.reload()">重新加载</button>
+                `;
+            }
+        };
+
+        function testClick() {
+            alert('按钮点击事件正常工作!');
+            console.log('按钮被点击');
+        }
+
+        // 定期检查地图状态
+        setInterval(() => {
+            const mapDiv = document.getElementById('map');
+            const rect = mapDiv.getBoundingClientRect();
+            console.log('地图容器尺寸:', rect.width, 'x', rect.height);
+            console.log('页面可见性:', document.hidden ? '隐藏' : '可见');
+            if (map) {
+                console.log('地图中心:', map.getCenter());
+                console.log('地图缩放:', map.getZoom());
+                console.log('地图边界:', map.getBounds());
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

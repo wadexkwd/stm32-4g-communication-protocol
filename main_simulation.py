@@ -102,22 +102,36 @@ class MyMQTTClient:
             return False
 
         try:
-            # 为每个传感器数据添加版本字段
-            data_with_version = []
-            for sensor_data in sensor_data_list:
-                sensor_data['version'] = APP_VERSION
-                data_with_version.append(sensor_data)
-                
             payload = json.dumps({
                 'event': 'SENSOR_DATA',
-                'data': data_with_version,
+                'data': sensor_data_list,
                 'version': APP_VERSION
             })
             self.client.publish(self.topic_up, payload.encode('utf-8'), qos=0)
-            print(f"已发布上行传感器数据，共 {len(data_with_version)} 个样本，主题: {self.topic_up}")
+            print(f"已发布上行传感器数据，共 {len(sensor_data_list)} 个样本，主题: {self.topic_up}")
             return True
         except Exception as e:
             print(f"发布上行传感器数据失败: {e}")
+            return False
+
+    def publish_up_sensor_timeout_event(self):
+        """发布传感器数据超时事件到云端"""
+        if not self.is_connected:
+            print("MQTT未连接，无法发布传感器数据超时事件")
+            return False
+
+        try:
+            payload = json.dumps({
+                'event': 'SENSOR_REPORT_TIMEOUT',
+                'timestamp': self.format_timestamp(),
+                'version': APP_VERSION,
+                'imei': self.imei
+            })
+            self.client.publish(self.topic_up, payload.encode('utf-8'), qos=0)
+            print(f"已发布传感器数据超时事件，主题: {self.topic_up}")
+            return True
+        except Exception as e:
+            print(f"发布传感器数据超时事件失败: {e}")
             return False
 
     def format_timestamp(self, timestamp=None):
@@ -221,8 +235,23 @@ def main():
     # 生成基础传感器数据
     base_sensor_data = generate_base_sensor_data()
     
+    # 初始化定时器变量
+    last_power_on_time = time.time()
+    last_timeout_event_time = time.time()
+    
     try:
         while True:
+            # 检查是否需要发送上电包（每隔10秒）
+            current_time = time.time()
+            if current_time - last_power_on_time >= 10:
+                mqtt_client.publish_up_power_on_event()
+                last_power_on_time = current_time
+                
+            # 检查是否需要发送传感器数据超时事件包（每隔20秒）
+            if current_time - last_timeout_event_time >= 20:
+                mqtt_client.publish_up_sensor_timeout_event()
+                last_timeout_event_time = current_time
+                
             # 生成传感器数据
             sensor_data_list = []
             for i in range(PACKET_COUNT_PER_UPLOAD):

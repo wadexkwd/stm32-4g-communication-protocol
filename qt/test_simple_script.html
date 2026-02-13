@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>简单脚本加载测试</title>
+    <style>
+        #status {
+            padding: 10px;
+            margin: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+    </style>
+    
+    <!-- 直接在head中引入 -->
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: "dd1127e11e1f2d5504a2f2ec9824eb78"
+        };
+    </script>
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2"></script>
+</head>
+<body>
+    <h1>简单脚本加载测试</h1>
+    
+    <div id="status"></div>
+    
+    <script type="text/javascript">
+        function log(msg, isError) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML += '<div style="' + (isError ? 'color: red' : 'color: green') + '">' +
+                new Date().toLocaleTimeString() + ': ' + msg + '</div>';
+            console.log(msg);
+        }
+        
+        try {
+            log('脚本开始执行');
+            log('window._AMapSecurityConfig: ' + typeof window._AMapSecurityConfig);
+            
+            // 检查AMap对象
+            if (typeof AMap !== 'undefined') {
+                log('✅ AMap对象已定义');
+                
+                log('AMap类型: ' + typeof AMap);
+                log('AMap对象详细信息: ' + JSON.stringify(AMap));
+                
+                log('✅ 脚本加载成功');
+            } else {
+                log('❌ AMap对象未定义', true);
+            }
+        } catch (e) {
+            log('❌ 错误: ' + e.message, true);
+            console.error(e);
+        }
+        
+        log('脚本执行结束');
+    </script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>脚本解析测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>脚本解析测试</h1>
+    
+    <div class="section">
+        <h2>页面信息</h2>
+        <p id="title">页面标题: 等待中...</p>
+        <p id="url">页面 URL: 等待中...</p>
+        <p id="charset">字符编码: 等待中...</p>
+    </div>
+    
+    <div class="section">
+        <h2>脚本解析测试</h2>
+        <p id="script-count">脚本标签数量: 等待中...</p>
+        <div id="script-details"></div>
+    </div>
+    
+    <div class="section">
+        <h2>执行状态</h2>
+        <p id="js-execution">JavaScript 执行: <span style="color: red;">未执行</span></p>
+        <p id="variables">变量状态: <span style="color: red;">未初始化</span></p>
+    </div>
+    
+    <div class="section">
+        <h2>外部脚本测试</h2>
+        <p id="external-script">外部脚本: <span style="color: red;">未加载</span></p>
+    </div>
+
+    <script type="text/javascript">
+        console.log('内联脚本开始执行');
+        
+        // 页面信息
+        document.getElementById('title').textContent = '页面标题: ' + document.title;
+        document.getElementById('url').textContent = '页面 URL: ' + window.location.href;
+        document.getElementById('charset').textContent = '字符编码: UTF-8';
+        
+        // 脚本标签计数
+        const scripts = document.querySelectorAll('script');
+        console.log('脚本标签数量:', scripts.length);
+        document.getElementById('script-count').textContent = '脚本标签数量: ' + scripts.length;
+        
+        // 详细信息
+        const scriptDetails = document.getElementById('script-details');
+        scripts.forEach((script, index) => {
+            const details = document.createElement('div');
+            details.className = 'script-detail';
+            details.innerHTML = `
+                <h4>脚本 ${index + 1}:</h4>
+                <p><strong>源:</strong> ${script.src || '内联'}</p>
+                <p><strong>类型:</strong> ${script.type || 'text/javascript'}</p>
+                ${script.src ? `<p><strong>URL:</strong> ${script.src}</p>` : ''}
+            `;
+            scriptDetails.appendChild(details);
+        });
+        
+        // JavaScript 执行状态
+        document.getElementById('js-execution').innerHTML = 'JavaScript 执行: <span style="color: green;">已执行</span>';
+        document.getElementById('variables').innerHTML = '变量状态: <span style="color: green;">已初始化</span>';
+        
+        // 全局变量
+        window.myTestVar = '测试变量值';
+        
+        console.log('内联脚本执行完成');
+        console.log('全局变量:', window.myTestVar);
+    </script>
+
+    <!-- 外部脚本测试 -->
+    <script type="text/javascript" src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <script type="text/javascript">
+        // 检查外部脚本
+        function checkExternalScript() {
+            if (typeof jQuery !== 'undefined') {
+                document.getElementById('external-script').innerHTML = '外部脚本: <span style="color: green;">已加载</span> (v' + jQuery.fn.jquery + ')';
+                console.log('jQuery 已加载:', jQuery.fn.jquery);
+            } else {
+                document.getElementById('external-script').innerHTML = '外部脚本: <span style="color: red;">未加载</span>';
+                console.log('jQuery 未加载');
+            }
+        }
+        
+        // 页面加载完成后检查
+        window.addEventListener('load', () => {
+            console.log('页面加载完成');
+            checkExternalScript();
+        });
+        
+        // 延迟检查
+        setTimeout(checkExternalScript, 500);
+    </script>
+</body>
+</html>

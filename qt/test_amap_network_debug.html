@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>网络调试测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background-color: #f5f5f5; }
+        .test { margin: 10px 0; padding: 10px; background: white; border-radius: 5px; }
+        .success { border-left: 4px solid green; }
+        .error { border-left: 4px solid red; }
+        #results { max-height: 400px; overflow-y: auto; }
+        #log { font-family: monospace; font-size: 12px; margin: 10px 0; padding: 10px; background: #333; color: #0f0; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>网络调试测试</h1>
+    
+    <div id="results"></div>
+    <div id="log"></div>
+    
+    <script>
+        function log(text) {
+            const logDiv = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${time}] ${text}<br>`;
+            console.log(text);
+        }
+        
+        function addTest(name, result, type) {
+            const resultsDiv = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `test ${type}`;
+            div.innerHTML = `<strong>${name}:</strong> ${result}`;
+            resultsDiv.appendChild(div);
+        }
+        
+        log('=== 网络调试测试开始 ===');
+        
+        // 测试1: 页面加载
+        addTest('页面加载', '成功', 'success');
+        log('页面加载完成');
+        
+        // 测试2: 网络连接检测
+        const testUrls = [
+            {name: '百度', url: 'https://www.baidu.com', method: 'HEAD'},
+            {name: '高德地图', url: 'https://ditu.amap.com', method: 'HEAD'},
+            {name: '高德API', url: 'https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2', method: 'GET'}
+        ];
+        
+        testUrls.forEach((test, index) => {
+            log(`测试 ${test.name} (${test.url})`);
+            
+            fetch(test.url, {
+                method: test.method,
+                mode: 'cors',
+                cache: 'no-cache',
+                redirect: 'follow'
+            })
+            .then(response => {
+                log(`${test.name} 请求成功，状态: ${response.status}`);
+                addTest(`${test.name} 连接`, `${response.status} ${response.statusText}`, 'success');
+            })
+            .catch(error => {
+                log(`${test.name} 请求失败: ${error.message}`);
+                addTest(`${test.name} 连接`, `失败: ${error.message}`, 'error');
+            });
+        });
+        
+        // 测试3: 直接加载脚本
+        log('开始直接加载高德地图API脚本');
+        
+        const script = document.createElement('script');
+        script.src = 'https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2';
+        script.crossOrigin = 'anonymous';
+        
+        script.onload = function() {
+            log('高德地图API脚本加载成功');
+            addTest('高德地图API', '加载成功', 'success');
+            addTest('AMap对象', typeof AMap, 'success');
+            
+            if (typeof AMap !== 'undefined') {
+                addTest('地图库版本', AMap.version || 'Unknown', 'success');
+            }
+        };
+        
+        script.onerror = function(event) {
+            log(`高德地图API脚本加载失败: ${event.message}`);
+            addTest('高德地图API', `加载失败: ${event.message}`, 'error');
+        };
+        
+        script.onabort = function() {
+            log('高德地图API脚本加载被中断');
+            addTest('高德地图API', '加载被中断', 'error');
+        };
+        
+        document.head.appendChild(script);
+        log('API脚本已添加到页面');
+        
+        // 超时检查
+        setTimeout(() => {
+            log('=== 超时检查 ===');
+            
+            if (typeof AMap === 'undefined') {
+                log('AMap对象仍然未定义');
+                addTest('超时检查', 'AMap未定义', 'error');
+            }
+        }, 10000);
+        
+    </script>
+</body>
+</html>

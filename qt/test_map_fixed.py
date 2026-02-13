@@ -44,7 +44,7 @@ class MapWindow(QMainWindow):
         
         # 使用本地 HTML 文件
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        html_file = os.path.join(current_dir, "test_map_simple.html")
+        html_file = os.path.join(current_dir, "test_map_amap.html")
         
         print(f"HTML 文件路径: {html_file}")
         

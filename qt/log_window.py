@@ -10,7 +10,7 @@
 from datetime import datetime
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextEdit, QPushButton
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPalette
 
 class LogWindow(QDialog):
     """日志窗口类"""
@@ -23,6 +23,9 @@ class LogWindow(QDialog):
         
         # 创建UI
         self.create_ui()
+        
+        # 自动适应系统主题
+        self.adjust_theme()
     
     def create_ui(self):
         """创建日志窗口界面"""
@@ -33,7 +36,6 @@ class LogWindow(QDialog):
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setFont(QFont("Courier New", 10))
-        self.log_text.setStyleSheet("background-color: #f0f0f0;")
         
         # 清除按钮
         self.clear_btn = QPushButton("清除日志")
@@ -51,6 +53,31 @@ class LogWindow(QDialog):
         
         main_layout.addWidget(self.log_text)
         main_layout.addLayout(button_layout)
+    
+    def adjust_theme(self):
+        """根据系统主题调整背景和字体颜色"""
+        # 获取当前调色板
+        palette = self.log_text.palette()
+        
+        # 获取背景颜色（跟随主界面或系统）
+        bg_color = palette.color(QPalette.Base)
+        
+        # 计算对比度，自动确定字体颜色（取反）
+        # 使用相对亮度算法计算对比度
+        r, g, b = bg_color.red(), bg_color.green(), bg_color.blue()
+        relative_luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        
+        # 如果背景较暗，使用白色字体；如果背景较亮，使用黑色字体
+        if relative_luminance < 0.5:
+            fg_color = palette.color(QPalette.Light)  # 白色
+        else:
+            fg_color = palette.color(QPalette.Dark)   # 黑色
+        
+        # 设置样式
+        self.log_text.setStyleSheet(
+            f"background-color: rgb({bg_color.red()}, {bg_color.green()}, {bg_color.blue()}); "
+            f"color: rgb({fg_color.red()}, {fg_color.green()}, {fg_color.blue()});"
+        )
     
     def add_log(self, text):
         """添加日志内容"""

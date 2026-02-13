@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>网络连接测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .loading { background-color: #fff3cd; border-color: #ffeeba; }
+        .test h3 { margin-top: 0; }
+    </style>
+</head>
+<body>
+    <h1>网络连接测试</h1>
+    
+    <div class="test loading">
+        <h3>Google CDN 访问</h3>
+        <p id="google-cdn">状态: 正在测试...</p>
+        <p id="google-details"></p>
+    </div>
+    
+    <div class="test loading">
+        <h3>高德地图 API</h3>
+        <p id="amap-api">状态: 正在测试...</p>
+        <p id="amap-details"></p>
+    </div>
+    
+    <div class="test loading">
+        <h3>HTTP/HTTPS访问</h3>
+        <p id="http-test">状态: 正在测试...</p>
+        <p id="http-details"></p>
+    </div>
+    
+    <div class="test loading">
+        <h3>网络信息</h3>
+        <p id="online-status">在线状态: 等待中...</p>
+        <p id="network-type">网络类型: 等待中...</p>
+    </div>
+
+    <script type="text/javascript">
+        console.log('网络连接测试开始');
+        
+        const startTime = Date.now();
+        
+        const googleTest = document.getElementById('google-cdn');
+        const googleDetails = document.getElementById('google-details');
+        const amapTest = document.getElementById('amap-api');
+        const amapDetails = document.getElementById('amap-details');
+        const httpTest = document.getElementById('http-test');
+        const httpDetails = document.getElementById('http-details');
+        const onlineStatus = document.getElementById('online-status');
+        const networkType = document.getElementById('network-type');
+        
+        function showTestResult(element, details, success, message) {
+            element.className = `test ${success ? 'success' : 'error'}`;
+            
+            const result = document.querySelector(`#${element.id} p:first-child`);
+            const detailEl = document.querySelector(`#${element.id} p:last-child`);
+            
+            if (success) {
+                result.innerHTML = `状态: <span style="color: green;">✅ ${message}</span>`;
+            } else {
+                result.innerHTML = `状态: <span style="color: red;">❌ ${message}</span>`;
+            }
+            
+            if (details) {
+                detailEl.textContent = details;
+            }
+        }
+        
+        function updateStatus() {
+            onlineStatus.textContent = `在线状态: ${navigator.onLine ? '在线' : '离线'}`;
+            
+            if (navigator.connection) {
+                networkType.textContent = `网络类型: ${navigator.connection.effectiveType}`;
+            }
+        }
+        
+        // 测试网络状态
+        updateStatus();
+        console.log('网络状态:', navigator.onLine);
+        
+        // 监听在线/离线事件
+        window.addEventListener('online', updateStatus);
+        window.addEventListener('offline', updateStatus);
+        
+        // 测试 Google CDN
+        function testGoogleCDN() {
+            const testStart = Date.now();
+            
+            fetch('https://www.google.com/favicon.ico', { method: 'HEAD', mode: 'no-cors' })
+                .then(() => {
+                    const time = Date.now() - testStart;
+                    showTestResult(googleTest.parentElement, `响应时间: ${time}ms`, true, '可访问');
+                    console.log('✅ Google CDN 可访问');
+                })
+                .catch(error => {
+                    const time = Date.now() - testStart;
+                    showTestResult(googleTest.parentElement, `响应时间: ${time}ms, 错误: ${error.message}`, false, '不可访问');
+                    console.error('❌ Google CDN 不可访问:', error);
+                });
+        }
+        
+        // 测试高德地图 API
+        function testAMapAPI() {
+            const testStart = Date.now();
+            
+            fetch('https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2', 
+                  { method: 'HEAD' })
+                .then(response => {
+                    const time = Date.now() - testStart;
+                    showTestResult(amapTest.parentElement, 
+                        `响应状态: ${response.status} ${response.statusText}, 响应时间: ${time}ms`, 
+                        true, '可访问');
+                    console.log('✅ 高德地图 API 可访问');
+                })
+                .catch(error => {
+                    const time = Date.now() - testStart;
+                    showTestResult(amapTest.parentElement, 
+                        `响应时间: ${time}ms, 错误: ${error.message}`, 
+                        false, '不可访问');
+                    console.error('❌ 高德地图 API 不可访问:', error);
+                });
+        }
+        
+        // 测试 HTTP/HTTPS
+        function testHTTP() {
+            const testStart = Date.now();
+            
+            fetch('https://httpbin.org/get')
+                .then(response => response.json())
+                .then(data => {
+                    const time = Date.now() - testStart;
+                    showTestResult(httpTest.parentElement, 
+                        `IP: ${data.origin}, 响应时间: ${time}ms, 协议: ${location.protocol}`, 
+                        true, 'HTTP/HTTPS访问正常');
+                    console.log('✅ HTTP/HTTPS 访问正常');
+                })
+                .catch(error => {
+                    const time = Date.now() - testStart;
+                    showTestResult(httpTest.parentElement, 
+                        `响应时间: ${time}ms, 错误: ${error.message}`, 
+                        false, 'HTTP/HTTPS访问失败');
+                    console.error('❌ HTTP/HTTPS 访问失败:', error);
+                });
+        }
+        
+        // 启动所有测试
+        setTimeout(() => {
+            console.log('启动网络测试');
+            testGoogleCDN();
+            testAMapAPI();
+            testHTTP();
+        }, 1000);
+        
+        console.log('网络测试初始化完成');
+    </script>
+</body>
+</html>

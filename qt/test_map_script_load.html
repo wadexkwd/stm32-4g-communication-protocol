@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>脚本加载测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { margin: 20px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .loading { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    </style>
+</head>
+<body>
+    <h1>高德地图 API 加载测试</h1>
+    
+    <div id="status" class="loading">
+        <strong>正在加载脚本...</strong><br>
+        <small id="status-text">正在尝试加载高德地图API...</small>
+    </div>
+
+    <div id="debug-info">
+        <h3>调试信息</h3>
+        <p id="load-time">加载时间: 等待中...</p>
+        <p id="error-detail"></p>
+    </div>
+
+    <script type="text/javascript">
+        const startTime = Date.now();
+        
+        function updateLoadTime() {
+            const elapsed = Date.now() - startTime;
+            document.getElementById('load-time').textContent = `加载时间: ${elapsed}ms`;
+        }
+        
+        function showSuccess() {
+            const statusEl = document.getElementById('status');
+            statusEl.className = 'status success';
+            statusEl.innerHTML = `
+                <strong>API加载成功!</strong><br>
+                <small>高德地图API已成功加载</small>
+            `;
+            
+            const loadTimeEl = document.getElementById('load-time');
+            loadTimeEl.textContent = `加载时间: ${Date.now() - startTime}ms`;
+            loadTimeEl.style.color = 'green';
+            
+            console.log('AMap 已加载:', typeof AMap);
+            if (typeof AMap !== 'undefined') {
+                console.log('AMap 对象:', AMap);
+            }
+        }
+        
+        function showError(message, detail = '') {
+            const statusEl = document.getElementById('status');
+            statusEl.className = 'status error';
+            statusEl.innerHTML = `
+                <strong>API加载失败!</strong><br>
+                <small>错误: ${message}</small>
+            `;
+            
+            const errorEl = document.getElementById('error-detail');
+            errorEl.textContent = `详细信息: ${detail}`;
+            errorEl.style.color = 'red';
+            
+            const loadTimeEl = document.getElementById('load-time');
+            loadTimeEl.textContent = `加载时间: ${Date.now() - startTime}ms`;
+            loadTimeEl.style.color = 'red';
+        }
+        
+        // 检测 AMap 是否加载
+        function checkAMap() {
+            updateLoadTime();
+            
+            if (typeof AMap !== 'undefined') {
+                console.log('✅ AMap 已定义');
+                showSuccess();
+                return true;
+            }
+            
+            return false;
+        }
+        
+        // 启动定时检查
+        const checkInterval = setInterval(() => {
+            console.log('检查 AMap...');
+            
+            if (checkAMap()) {
+                clearInterval(checkInterval);
+            }
+        }, 500);
+        
+        // 设置超时
+        const timeout = setTimeout(() => {
+            clearInterval(checkInterval);
+            
+            console.log('❌ 加载超时');
+            console.log('typeof AMap:', typeof AMap);
+            
+            if (typeof AMap === 'undefined') {
+                showError('API加载超时', '15秒内未检测到 AMap 对象');
+            }
+        }, 15000);
+        
+        // 检测网络和资源加载
+        window.addEventListener('error', (event) => {
+            console.error('资源加载错误:', event);
+            if (event.target && event.target.tagName === 'SCRIPT') {
+                showError('脚本加载失败', event.target.src);
+                clearInterval(checkInterval);
+                clearTimeout(timeout);
+            }
+        });
+        
+        // 监听资源加载
+        window.addEventListener('load', () => {
+            console.log('✅ 页面加载完成');
+            checkAMap();
+        });
+        
+        // 脚本加载成功后的回调
+        window.onMapLoad = function() {
+            console.log('地图加载回调');
+        };
+        
+        console.log('脚本开始执行');
+    </script>
+
+    <!-- 配置安全密钥 -->
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: "dd1127e11e1f2d5504a2f2ec9824eb78",
+        };
+        console.log('安全密钥配置:', window._AMapSecurityConfig);
+    </script>
+
+    <!-- 直接加载高德地图API -->
+    <script type="text/javascript" 
+            src="https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2"
+            onerror="console.error('脚本加载失败')">
+    </script>
+</body>
+</html>

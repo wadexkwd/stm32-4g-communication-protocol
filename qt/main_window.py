@@ -36,6 +36,34 @@ from log_window import LogWindow
 from utils import StreamRedirector
 
 # =============================================================================
+# 配置参数
+# =============================================================================
+# 软件版本
+APP_VERSION = "v1.2"
+
+# 地图配置
+MAP_API_DAILY_LIMIT = 1000  # 地图API每日调用次数限制
+MAP_UPDATE_DISTANCE_THRESHOLD = 50  # 地图更新距离阈值（米）
+MAP_ZOOM_LEVEL = 15  # 地图显示缩放级别
+
+# 日志配置
+MAX_LOG_FILE_SIZE = 5 * 1024 * 1024  # 日志文件最大大小（5MB）
+
+# 图表配置
+CHART_DISPLAY_DURATION = 10  # 图表显示时间范围（秒）
+CHART_MAX_DATA_POINTS = 3000  # 图表最大数据点数量
+CHART_Y_AXIS_MARGIN = 0.1  # 图表Y轴边距比例（10%）
+
+# 数据加载配置
+DATA_LOAD_TIME_RANGE = 300  # 数据加载时间范围（秒）
+
+# MQTT配置
+MQTT_RECONNECT_DELAY = 1000  # MQTT重连延迟（毫秒）
+
+# 其他配置
+WINDOW_GEOMETRY = (100, 100, 1400, 900)  # 窗口几何尺寸（x, y, width, height）
+
+# =============================================================================
 # 主窗口类
 # =============================================================================
 class MainWindow(QMainWindow):
@@ -43,8 +71,8 @@ class MainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("应急跌落事件监控系统")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setWindowTitle(f"应急跌落事件监控系统{APP_VERSION}")
+        self.setGeometry(*WINDOW_GEOMETRY)
         
         # 初始化时间记录变量
         self.start_time = time.time()
@@ -63,7 +91,7 @@ class MainWindow(QMainWindow):
         self.log_file_path = None
         self.log_file_size = 0
         self.log_file_counter = 0
-        self.max_log_file_size = 5 * 1024 * 1024  # 5MB
+        self.max_log_file_size = MAX_LOG_FILE_SIZE
         
         # 创建UI
         self.create_ui()
@@ -140,29 +168,6 @@ class MainWindow(QMainWindow):
         
         # 主内容区 - 垂直布局，大小可手动调整
         content_splitter = QSplitter(Qt.Vertical)
-        
-        # 原始数据显示区
-        raw_data_widget = QWidget()
-        raw_data_layout = QVBoxLayout(raw_data_widget)
-        
-        raw_data_group = QGroupBox("原始数据打印区")
-        raw_data_group_layout = QVBoxLayout(raw_data_group)
-        
-        # 原始数据显示区和清除按钮布局
-        raw_data_top_layout = QHBoxLayout()
-        self.raw_data_text = QTextEdit()
-        self.raw_data_text.setReadOnly(True)
-        self.raw_data_text.setFont(QFont("Courier New", 10))
-        
-        self.clear_raw_data_btn = QPushButton("清除显示")
-        self.clear_raw_data_btn.clicked.connect(self.clear_raw_data)
-        raw_data_top_layout.addWidget(self.raw_data_text)
-        raw_data_top_layout.addWidget(self.clear_raw_data_btn)
-        
-        raw_data_group_layout.addLayout(raw_data_top_layout)
-        raw_data_layout.addWidget(raw_data_group)
-        
-        content_splitter.addWidget(raw_data_widget)
         
         # 解析数据展示区
         parsed_widget = QWidget()
@@ -901,7 +906,7 @@ class MainWindow(QMainWindow):
                         return;
                     }
                     
-                    // 检查距离是否小于50米
+                    // 检查距离是否小于指定阈值
                     if (lastLocation) {
                         const distance = calculateDistance(lastLocation.latitude, lastLocation.longitude, latitude, longitude);
                         if (distance < 50) {
@@ -978,6 +983,11 @@ class MainWindow(QMainWindow):
 </html>
                 """.strip()
                 
+                # 替换HTML中的变量值
+                map_html = map_html.replace("${MAP_API_DAILY_LIMIT}", str(MAP_API_DAILY_LIMIT))
+                map_html = map_html.replace("${MAP_UPDATE_DISTANCE_THRESHOLD}", str(MAP_UPDATE_DISTANCE_THRESHOLD))
+                map_html = map_html.replace("${MAP_ZOOM_LEVEL}", str(MAP_ZOOM_LEVEL))
+                
                 self.map_view.setHtml(map_html)
                 self.map_view.setMinimumHeight(400)
                 map_layout.addWidget(self.map_view)
@@ -1011,27 +1021,28 @@ class MainWindow(QMainWindow):
         content_splitter.setSizes([300, 600])
         main_layout.addWidget(content_splitter)
         
-        # 底部导出区域 - 可手动调节，默认不超过4行
-        export_splitter = QSplitter(Qt.Vertical)
-        
-        export_widget = QWidget()
-        export_layout = QVBoxLayout(export_widget)
-        
+        # 底部导出区域 - 紧凑布局
         export_group = QGroupBox("数据导出")
         export_inner_layout = QHBoxLayout(export_group)
+        export_inner_layout.setSpacing(8)  # 减少控件间距
+        export_inner_layout.setContentsMargins(10, 10, 10, 10)  # 减少边距
         
         # 时间范围选择
         self.start_time_edit = QDateTimeEdit()
         self.start_time_edit.setDateTime(QDateTime.currentDateTime().addDays(-1))
         self.start_time_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.start_time_edit.setFixedHeight(30)  # 减少控件高度
         
         self.end_time_edit = QDateTimeEdit()
         self.end_time_edit.setDateTime(QDateTime.currentDateTime())
         self.end_time_edit.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        self.end_time_edit.setFixedHeight(30)  # 减少控件高度
         
         # 导出按钮
         self.export_btn = QPushButton("导出Excel")
         self.export_btn.clicked.connect(self.export_to_excel)
+        self.export_btn.setFixedHeight(30)  # 减少按钮高度
+        self.export_btn.setFixedWidth(100)  # 设置按钮固定宽度
         
         export_inner_layout.addWidget(QLabel("开始时间:"))
         export_inner_layout.addWidget(self.start_time_edit)
@@ -1040,13 +1051,8 @@ class MainWindow(QMainWindow):
         export_inner_layout.addStretch()
         export_inner_layout.addWidget(self.export_btn)
         
-        export_layout.addWidget(export_group)
-        
-        export_splitter.addWidget(export_widget)
-        
-        # 设置导出区域默认大小
-        export_splitter.setSizes([150, 0])
-        main_layout.addWidget(export_splitter)
+        # 直接添加到主布局，不使用分割器，更紧凑
+        main_layout.addWidget(export_group)
         
         # 进度条
         self.progress_bar = QProgressBar()
@@ -1186,14 +1192,9 @@ class MainWindow(QMainWindow):
     
     def on_message_received(self, topic, payload):
         """处理原始消息"""
-        # 显示原始数据
+        # 显示原始数据到系统日志
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-        self.raw_data_text.append(f"[{timestamp}] 主题: {topic}\n内容: {payload}\n")
-        
-        # 自动滚动到底部
-        self.raw_data_text.verticalScrollBar().setValue(
-            self.raw_data_text.verticalScrollBar().maximum()
-        )
+        print(f"[{timestamp}] 主题: {topic}\n内容: {payload}")
         
         # 保存到log文件
         if not self.log_file:
@@ -1297,11 +1298,8 @@ class MainWindow(QMainWindow):
                 except (ValueError, KeyError) as e:
                     print(f"更新地图位置时出错: {e}")
         
-        # 设置图表显示的时间范围（10秒）
-        display_duration = 10  # 10秒
-        
-        # 更新图表数据并自动平移
-        display_duration = 10  # 显示最近10秒数据
+        # 设置图表显示的时间范围
+        display_duration = CHART_DISPLAY_DURATION
         current_time = time.time()
         time_diff = current_time - self.start_time
         
@@ -1436,7 +1434,7 @@ class MainWindow(QMainWindow):
             
             # 计算120%的范围
             range_ = y_max - y_min
-            margin = range_ * 0.1  # 10%的边距，总共120%
+            margin = range_ * CHART_Y_AXIS_MARGIN
             
             new_y_min = y_min - margin
             new_y_max = y_max + margin
@@ -1472,7 +1470,7 @@ class MainWindow(QMainWindow):
             
             # 计算120%的范围
             range_ = y_max - y_min
-            margin = range_ * 0.1  # 10%的边距，总共120%
+            margin = range_ * CHART_Y_AXIS_MARGIN
             
             new_y_min = y_min - margin
             new_y_max = y_max + margin
@@ -1507,7 +1505,7 @@ class MainWindow(QMainWindow):
             
             # 计算120%的范围
             range_ = y_max - y_min
-            margin = range_ * 0.1  # 10%的边距，总共120%
+            margin = range_ * CHART_Y_AXIS_MARGIN
             
             new_y_min = y_min - margin
             new_y_max = y_max + margin
@@ -1542,7 +1540,7 @@ class MainWindow(QMainWindow):
             
             # 计算120%的范围
             range_ = y_max - y_min
-            margin = range_ * 0.1  # 10%的边距，总共120%
+            margin = range_ * CHART_Y_AXIS_MARGIN
             
             new_y_min = y_min - margin
             new_y_max = y_max + margin
@@ -1577,7 +1575,7 @@ class MainWindow(QMainWindow):
             
             # 计算120%的范围
             range_ = y_max - y_min
-            margin = range_ * 0.1  # 10%的边距，总共120%
+            margin = range_ * CHART_Y_AXIS_MARGIN
             
             new_y_min = y_min - margin
             new_y_max = y_max + margin
@@ -1612,7 +1610,7 @@ class MainWindow(QMainWindow):
             
             # 计算120%的范围
             range_ = y_max - y_min
-            margin = range_ * 0.1  # 10%的边距，总共120%
+            margin = range_ * CHART_Y_AXIS_MARGIN
             
             new_y_min = y_min - margin
             new_y_max = y_max + margin
@@ -1636,9 +1634,9 @@ class MainWindow(QMainWindow):
         if not current_imei:
             return
         
-        # 查询数据库中的最近5分钟数据（进一步减少数据量，大幅提升加载速度）
+        # 查询数据库中的最近指定时间范围数据
         all_data = self.db_manager.query_data(current_imei, 
-            QDateTime.currentDateTime().addSecs(-300), 
+            QDateTime.currentDateTime().addSecs(-DATA_LOAD_TIME_RANGE), 
             QDateTime.currentDateTime())
         
         # 优化表格数据插入：先设置行数，再批量插入
@@ -1819,9 +1817,9 @@ class MainWindow(QMainWindow):
             if not current_imei:
                 return
                 
-            # 计算要加载的时间范围（5分钟）
+            # 计算要加载的时间范围
             end_time = self.loaded_earliest_time
-            start_time = end_time.addSecs(-300)
+            start_time = end_time.addSecs(-DATA_LOAD_TIME_RANGE)
             
             # 查询数据
             new_data = self.db_manager.query_data(current_imei, start_time, end_time)
@@ -1891,7 +1889,7 @@ class MainWindow(QMainWindow):
     def remove_old_data_points(self, series, min_time):
         """移除图表系列中超出时间范围的数据点（优化：限制最大数据点数量）"""
         # 限制每个图表系列的最大数据点数量，防止图表渲染卡顿
-        max_points = 3000  # 限制在3000个点，约5分钟数据
+        max_points = CHART_MAX_DATA_POINTS
         
         # 先移除超出时间范围的数据点
         points_to_remove = []
@@ -1999,9 +1997,6 @@ class MainWindow(QMainWindow):
             js_code = f"window.updateLocation({latitude}, {longitude})"
             self.map_view.page().runJavaScript(js_code)
     
-    def clear_raw_data(self):
-        """清除原始数据显示"""
-        self.raw_data_text.clear()
     
     def closeEvent(self, event):
         """关闭事件处理"""

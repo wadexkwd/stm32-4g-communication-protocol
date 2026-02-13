@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>动态加载地图 API 测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { margin: 20px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .loading { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .debug-info { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>动态加载地图 API 测试</h1>
+    
+    <div id="status" class="loading">
+        <strong>正在尝试动态加载地图 API...</strong><br>
+        <small id="status-text">正在创建脚本标签...</small>
+    </div>
+
+    <div class="debug-info">
+        <h3>调试信息</h3>
+        <p id="load-time">加载时间: 等待中...</p>
+        <p id="script-state">脚本状态: 未创建</p>
+        <p id="amap-type">AMap类型: 等待中...</p>
+        <p id="security-config">安全配置: 等待中...</p>
+    </div>
+
+    <script type="text/javascript">
+        console.log('测试开始');
+        
+        const startTime = Date.now();
+        
+        function updateLoadTime() {
+            const elapsed = Date.now() - startTime;
+            document.getElementById('load-time').textContent = `加载时间: ${elapsed}ms`;
+        }
+        
+        function showStatus(text) {
+            document.getElementById('status-text').textContent = text;
+            updateLoadTime();
+        }
+        
+        function showSuccess() {
+            const statusEl = document.getElementById('status');
+            statusEl.className = 'status success';
+            statusEl.innerHTML = `
+                <strong>API加载成功!</strong><br>
+                <small>高德地图API已成功加载</small>
+            `;
+            
+            document.getElementById('load-time').style.color = 'green';
+            document.getElementById('amap-type').style.color = 'green';
+            document.getElementById('security-config').style.color = 'green';
+        }
+        
+        function showError(message) {
+            const statusEl = document.getElementById('status');
+            statusEl.className = 'status error';
+            statusEl.innerHTML = `
+                <strong>API加载失败!</strong><br>
+                <small>错误: ${message}</small>
+            `;
+            
+            document.getElementById('load-time').style.color = 'red';
+            document.getElementById('amap-type').style.color = 'red';
+            document.getElementById('security-config').style.color = 'red';
+        }
+        
+        // 配置安全密钥
+        function configureSecurity() {
+            console.log('配置安全密钥');
+            window._AMapSecurityConfig = {
+                securityJsCode: "dd1127e11e1f2d5504a2f2ec9824eb78"
+            };
+            
+            document.getElementById('security-config').textContent = 
+                `安全配置: 对象类型 = ${typeof window._AMapSecurityConfig}`;
+            updateLoadTime();
+        }
+        
+        // 动态创建脚本标签
+        function createScriptTag() {
+            console.log('创建脚本标签');
+            
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = 'https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2';
+            
+            script.onload = function() {
+                console.log('✅ 外部脚本加载成功');
+                document.getElementById('script-state').textContent = '脚本状态: 已加载';
+                
+                // 检查 AMap 对象
+                checkAMap();
+            };
+            
+            script.onerror = function() {
+                console.error('❌ 外部脚本加载失败');
+                showError('脚本加载失败');
+                document.getElementById('script-state').textContent = '脚本状态: 加载失败';
+            };
+            
+            document.head.appendChild(script);
+            console.log('脚本标签已添加到 DOM');
+            document.getElementById('script-state').textContent = '脚本状态: 加载中';
+        }
+        
+        // 检查 AMap 对象
+        function checkAMap() {
+            updateLoadTime();
+            
+            if (typeof AMap !== 'undefined') {
+                console.log('✅ AMap 已定义');
+                document.getElementById('amap-type').textContent = `AMap类型: ${typeof AMap}`;
+                showSuccess();
+                
+                // 显示详细信息
+                console.log('AMap 对象:', AMap);
+                
+            } else {
+                console.log('AMap 未定义');
+                document.getElementById('amap-type').textContent = 'AMap类型: undefined';
+            }
+        }
+        
+        // 设置超时
+        const timeout = setTimeout(() => {
+            showError('加载超时');
+        }, 15000);
+        
+        // 页面加载完成后启动
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM 加载完成');
+            
+            try {
+                configureSecurity();
+                createScriptTag();
+                
+                // 检查脚本标签是否已创建
+                setTimeout(() => {
+                    const scriptTags = document.querySelectorAll('script[src*="amap"]');
+                    console.log('AMap 脚本标签数量:', scriptTags.length);
+                }, 1000);
+                
+            } catch (error) {
+                console.error('初始化过程错误:', error);
+                showError(error.message);
+            }
+        });
+        
+        console.log('脚本执行完成');
+    </script>
+</body>
+</html>

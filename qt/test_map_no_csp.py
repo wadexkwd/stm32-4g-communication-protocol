@@ -1,32 +1,40 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-本地瓦片地图测试程序
+测试无 CSP 限制的地图页面
 """
 
 import sys
 import os
+import platform
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtCore import QUrl
+from PySide6.QtWebEngineCore import QWebEnginePage
 
-class LocalTilesMapWindow(QMainWindow):
-    """本地瓦片地图窗口"""
+class DebugWebEnginePage(QWebEnginePage):
+    """捕获 JavaScript 控制台输出的自定义页面"""
+    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+        level_str = str(level)
+        print(f"[JS] {level_str} (line {line_number}): {message}")
+
+class NoCSPMapWindow(QMainWindow):
+    """无 CSP 限制的地图窗口"""
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("本地瓦片地图测试")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setWindowTitle("地图测试 - 无 CSP 限制")
+        self.setGeometry(100, 100, 1000, 700)
         
-        # 中央部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # 布局
         layout = QVBoxLayout(central_widget)
         
-        # 地图视图
         self.map_view = QWebEngineView()
+        self.page = DebugWebEnginePage()
+        self.map_view.setPage(self.page)
+        
         layout.addWidget(self.map_view)
         
         # 连接信号
@@ -34,15 +42,14 @@ class LocalTilesMapWindow(QMainWindow):
         self.map_view.titleChanged.connect(self.on_title_changed)
         self.map_view.urlChanged.connect(self.on_url_changed)
         
-        # 加载地图
-        self.load_local_tiles_map()
-    
-    def load_local_tiles_map(self):
-        """加载本地瓦片地图页面"""
-        print("正在加载本地瓦片地图页面...")
+        self.load_map()
+
+    def load_map(self):
+        """加载地图"""
+        print("正在加载地图...")
         
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        html_file = os.path.join(current_dir, "test_map_local_tiles.html")
+        html_file = os.path.join(current_dir, "test_map_amap_no_csp.html")
         
         print(f"HTML 文件路径: {html_file}")
         
@@ -77,40 +84,15 @@ class LocalTilesMapWindow(QMainWindow):
         print(f"URL: {url.toString()}")
 
     def check_map_content(self):
-        """检查地图内容"""
+        """检查页面内容"""
         self.map_view.page().runJavaScript(
-            "document.hidden", 
-            lambda hidden: print(f"页面是否隐藏: {hidden}")
+            "typeof AMap",
+            lambda result: print(f"AMap类型: {result}")
         )
         
         self.map_view.page().runJavaScript(
-            "document.getElementById('map').getBoundingClientRect()", 
-            lambda rect: print(f"地图容器尺寸: {rect}")
-        )
-        
-        self.map_view.page().runJavaScript(
-            "document.documentElement.outerHTML", 
-            lambda result: print("页面内容预览:\n" + result[:500])
-        )
-        
-        self.map_view.page().runJavaScript(
-            "document.getElementById('status')?.textContent || '未找到状态元素'",
+            "document.getElementById('status').textContent",
             lambda text: print(f"状态信息: {text.strip()}")
-        )
-        
-        self.map_view.page().runJavaScript(
-            "typeof L !== 'undefined' ? 'Leaflet 已加载' : 'Leaflet 未加载'",
-            lambda result: print(f"Leaflet 状态: {result}")
-        )
-        
-        self.map_view.page().runJavaScript(
-            "typeof map !== 'undefined' ? '地图对象已初始化' : '地图对象未初始化'",
-            lambda result: print(f"地图对象状态: {result}")
-        )
-        
-        self.map_view.page().runJavaScript(
-            "map ? map.hasLayer(map._layers[Object.keys(map._layers)[1]]) : false",
-            lambda hasLayer: print(f"地图是否有 TileLayer: {hasLayer}")
         )
 
     def show_error(self):
@@ -120,12 +102,6 @@ class LocalTilesMapWindow(QMainWindow):
         <body style="background-color: #ffcccc; padding: 20px;">
             <h1 style="color: red;">地图加载失败</h1>
             <p>无法加载地图页面。</p>
-            <p>请检查：</p>
-            <ul>
-                <li>HTML 文件是否存在</li>
-                <li>PySide6 WebEngine 是否正常工作</li>
-                <li>网络连接是否正常</li>
-            </ul>
         </body>
         </html>
         """
@@ -133,14 +109,14 @@ class LocalTilesMapWindow(QMainWindow):
 
 def main():
     """主函数"""
-    print("=== 本地瓦片地图测试程序 ===")
+    print("=== 地图组件测试程序 ===")
+    print(f"系统信息: {platform.system()} {platform.release()}")
+    print(f"Python 版本: {sys.version}")
     
     app = QApplication(sys.argv)
     
-    print("应用程序创建成功")
-    
     try:
-        window = LocalTilesMapWindow()
+        window = NoCSPMapWindow()
         window.show()
         print("窗口显示成功")
         

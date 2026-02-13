@@ -1,64 +1,91 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-离线地图测试程序
+最终的地图组件测试程序 - 修复后的版本
 """
 
 import sys
 import os
 from PySide6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QWidget
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QUrl, QTimer
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 
-class OfflineMapWindow(QMainWindow):
-    """离线地图窗口"""
+class TestWebEnginePage(QWebEnginePage):
+    """捕获 JavaScript 控制台输出的自定义页面"""
+    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+        level_str = str(level)
+        print(f"[JS] {level_str} (line {line_number}): {message}")
+
+class FinalMapWindow(QMainWindow):
+    """最终的地图窗口"""
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("离线地图测试")
-        self.setGeometry(100, 100, 1400, 900)
+        self.setWindowTitle("地图组件")
+        self.setGeometry(100, 100, 1000, 700)
         
-        # 中央部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # 布局
         layout = QVBoxLayout(central_widget)
         
-        # 地图视图
         self.map_view = QWebEngineView()
+        self.map_view.setPage(TestWebEnginePage())
+        
+        # 关键的修复设置
+        settings = self.map_view.settings()
+        settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+        settings.setAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls, True)
+        settings.setAttribute(QWebEngineSettings.LocalContentCanAccessFileUrls, True)
+        settings.setAttribute(QWebEngineSettings.XSSAuditingEnabled, False)
+        settings.setAttribute(QWebEngineSettings.PluginsEnabled, False)
+        settings.setAttribute(QWebEngineSettings.FullScreenSupportEnabled, True)
+        settings.setAttribute(QWebEngineSettings.SpatialNavigationEnabled, True)
+        settings.setAttribute(QWebEngineSettings.LinksIncludedInFocusChain, True)
+        
+        print("WebEngine 设置:")
+        print(f"JavaScript 启用: {settings.testAttribute(QWebEngineSettings.JavascriptEnabled)}")
+        print(f"本地访问远程URL: {settings.testAttribute(QWebEngineSettings.LocalContentCanAccessRemoteUrls)}")
+        
         layout.addWidget(self.map_view)
         
-        # 连接信号
         self.map_view.loadFinished.connect(self.on_load_finished)
         self.map_view.titleChanged.connect(self.on_title_changed)
         self.map_view.urlChanged.connect(self.on_url_changed)
         
-        # 加载地图
-        self.load_offline_map()
-    
-    def load_offline_map(self):
-        """加载离线地图页面"""
-        print("正在加载离线地图页面...")
+        self.load_map()
+
+    def load_map(self):
+        print("正在加载地图...")
         
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        html_file = os.path.join(current_dir, "test_map_offline.html")
         
-        print(f"HTML 文件路径: {html_file}")
+        # 尝试使用多个可用的HTML文件
+        html_files = [
+            os.path.join(current_dir, "test_map_amap_fixed.html"),
+            os.path.join(current_dir, "test_map_amap.html"),
+    
+        ]
         
-        if os.path.exists(html_file):
-            print("HTML 文件存在")
+        html_file = None
+        for f in html_files:
+            if os.path.exists(f):
+                html_file = f
+                print(f"使用HTML文件: {html_file}")
+                break
+        
+        if html_file:
             file_url = QUrl.fromLocalFile(html_file)
             print(f"加载 URL: {file_url.toString()}")
             
             self.map_view.load(file_url)
             print("地图加载命令已发送")
         else:
-            print(f"错误: HTML 文件不存在: {html_file}")
+            print("错误: 未找到任何地图HTML文件")
             self.show_error()
 
     def on_load_finished(self, success):
-        """加载完成回调"""
         print(f"加载完成: {success}")
         
         if success:
@@ -69,22 +96,19 @@ class OfflineMapWindow(QMainWindow):
             self.show_error()
 
     def on_title_changed(self, title):
-        """标题变化回调"""
         print(f"页面标题: {title}")
 
     def on_url_changed(self, url):
-        """URL 变化回调"""
         print(f"URL: {url.toString()}")
 
     def check_map_content(self):
-        """检查地图内容"""
         self.map_view.page().runJavaScript(
             "document.hidden", 
             lambda hidden: print(f"页面是否隐藏: {hidden}")
         )
         
         self.map_view.page().runJavaScript(
-            "document.getElementById('map').getBoundingClientRect()", 
+            "document.getElementById('map')?.getBoundingClientRect() || '无地图容器'", 
             lambda rect: print(f"地图容器尺寸: {rect}")
         )
         
@@ -95,26 +119,15 @@ class OfflineMapWindow(QMainWindow):
         
         self.map_view.page().runJavaScript(
             "document.getElementById('status')?.textContent || '未找到状态元素'",
-            lambda text: print(f"状态信息: {text.strip()}")
+            lambda text: print(f"状态信息: {text}")
         )
         
         self.map_view.page().runJavaScript(
-            "typeof L !== 'undefined' ? 'Leaflet 已加载' : 'Leaflet 未加载'",
-            lambda result: print(f"Leaflet 状态: {result}")
-        )
-        
-        self.map_view.page().runJavaScript(
-            "typeof map !== 'undefined' ? '地图对象已初始化' : '地图对象未初始化'",
-            lambda result: print(f"地图对象状态: {result}")
-        )
-        
-        self.map_view.page().runJavaScript(
-            "map ? map.hasLayer(map._layers[Object.keys(map._layers)[1]]) : false",
-            lambda hasLayer: print(f"地图是否有 TileLayer: {hasLayer}")
+            "typeof AMap",
+            lambda amap_type: print(f"AMap类型: {amap_type}")
         )
 
     def show_error(self):
-        """显示错误信息"""
         error_html = """
         <html>
         <body style="background-color: #ffcccc; padding: 20px;">
@@ -126,21 +139,22 @@ class OfflineMapWindow(QMainWindow):
                 <li>PySide6 WebEngine 是否正常工作</li>
                 <li>网络连接是否正常</li>
             </ul>
+            <p><strong>调试信息:</strong></p>
+            <p>Python版本: {}</p>
         </body>
         </html>
-        """
+        """.format(sys.version)
         self.map_view.setHtml(error_html)
 
 def main():
-    """主函数"""
-    print("=== 离线地图测试程序 ===")
+    print("=== 地图组件测试程序 ===")
     
     app = QApplication(sys.argv)
     
     print("应用程序创建成功")
     
     try:
-        window = OfflineMapWindow()
+        window = FinalMapWindow()
         window.show()
         print("窗口显示成功")
         

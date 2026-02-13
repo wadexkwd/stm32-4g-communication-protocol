@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self' 'unsafe-inline' 'unsafe-eval';
+        script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webapi.amap.com;
+        style-src 'self' 'unsafe-inline' https://webapi.amap.com;
+        img-src 'self' data: https://*.amap.com;
+        font-src 'self' data: https://*.amap.com;
+        connect-src 'self' https://*.amap.com;
+    ">
+    <title>高德地图测试</title>
+    <style>
+        body { margin: 0; padding: 0; height: 100vh; background-color: #f0f0f0; }
+        #map { 
+            width: 100%; 
+            height: 100%; 
+            position: relative;
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .status.success { color: green; }
+        .status.error { color: red; }
+        .status.loading { color: orange; }
+    </style>
+    <!-- 配置安全密钥 -->
+    <script type="text/javascript">
+        window._AMapSecurityConfig = {
+            securityJsCode: "dd1127e11e1f2d5504a2f2ec9824eb78",
+        };
+    </script>
+    <!-- 引入高德地图API -->
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2"></script>
+</head>
+<body>
+    <div id="map">
+        <div class="status loading" id="status">
+            <strong>地图加载中...</strong><br>
+            <small>正在加载高德地图...</small>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        console.log('JavaScript 脚本开始执行');
+        
+        // 地图初始化
+        let map;
+        
+        // 页面加载完成后初始化地图
+        window.onload = function() {
+            console.log('页面加载完成');
+            initMap();
+        };
+        
+        // 初始化地图
+        function initMap() {
+            console.log('准备初始化地图');
+            
+            try {
+                // 检查 AMap 对象是否存在
+                if (typeof AMap === 'undefined') {
+                    throw new Error('高德地图API未加载');
+                }
+                
+                // 初始化地图（按照官方示例）
+                map = new AMap.Map('map', {
+                    zoom: 13,
+                    center: [116.397428, 39.90923], // 经纬度顺序：经度, 纬度
+                    viewMode: '2D',
+                    mapStyle: 'amap://styles/normal'
+                });
+                
+                console.log('地图初始化成功');
+                
+                // 添加地图控件
+                map.addControl(new AMap.Scale()); // 比例尺控件
+                map.addControl(new AMap.ToolBar()); // 工具栏控件
+                map.addControl(new AMap.MapType()); // 地图类型控件
+                
+                console.log('地图控件添加成功');
+                
+                // 地图加载成功
+                document.getElementById('status').className = 'status success';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载成功!</strong><br>
+                    <small>高德地图已准备好</small>
+                `;
+                
+            } catch (error) {
+                console.error('地图初始化失败:', error);
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载失败!</strong><br>
+                    <small>错误: ${error.message}</small>
+                `;
+            }
+        }
+        
+        // 设置超时检查
+        setTimeout(function() {
+            if (typeof AMap === 'undefined') {
+                console.error('高德地图API加载超时');
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载失败!</strong><br>
+                    <small>错误: 高德地图API加载超时</small>
+                `;
+            }
+        }, 10000);
+        
+        console.log('JavaScript 脚本执行完成');
+    </script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>高德地图测试 - 无CSP限制</title>
+    <style>
+        body { margin: 0; padding: 0; height: 100vh; background-color: #f0f0f0; }
+        #map { 
+            width: 100%; 
+            height: 100%; 
+            position: relative;
+        }
+        .status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .status.success { color: green; }
+        .status.error { color: red; }
+        .status.loading { color: orange; }
+    </style>
+    <!-- 配置安全密钥 -->
+    <script type="text/javascript">
+        console.log('配置安全密钥');
+        window._AMapSecurityConfig = {
+            securityJsCode: "dd1127e11e1f2d5504a2f2ec9824eb78"
+        };
+        console.log('安全密钥配置完成');
+    </script>
+    <!-- 直接引入高德地图API -->
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2"></script>
+</head>
+<body>
+    <div id="map">
+        <div class="status loading" id="status">
+            <strong>地图加载中...</strong><br>
+            <small>正在配置安全密钥...</small>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        console.log('JavaScript 脚本开始执行');
+        
+        // 地图初始化变量
+        let map;
+        
+        // 检查 API 是否加载成功
+        function checkApiLoaded() {
+            return new Promise((resolve, reject) => {
+                const timeout = 20000; // 20秒超时
+                const checkInterval = 200; // 每200ms检查一次
+                const startTime = Date.now();
+                
+                function check() {
+                    const elapsed = Date.now() - startTime;
+                    
+                    if (typeof AMap !== 'undefined') {
+                        console.log(`高德地图API加载成功，耗时: ${elapsed}ms`);
+                        resolve();
+                    } else if (elapsed > timeout) {
+                        console.error('高德地图API加载超时');
+                        reject(new Error('API加载超时'));
+                    } else {
+                        console.log(`API未加载，检查第${Math.floor(elapsed / checkInterval)}次，已耗时: ${elapsed}ms`);
+                        setTimeout(check, checkInterval);
+                    }
+                }
+                
+                // 立即检查
+                check();
+            });
+        }
+        
+        // 初始化地图
+        function initMap() {
+            console.log('开始初始化地图');
+            
+            try {
+                // 初始化地图实例
+                map = new AMap.Map('map', {
+                    zoom: 13,
+                    center: [116.397428, 39.90923],
+                    viewMode: '2D',
+                    mapStyle: 'amap://styles/normal'
+                });
+                
+                console.log('地图初始化成功');
+                
+                // 添加常用控件
+                map.addControl(new AMap.Scale());
+                map.addControl(new AMap.ToolBar());
+                map.addControl(new AMap.MapType());
+                
+                console.log('地图控件添加成功');
+                
+                // 更新状态信息
+                document.getElementById('status').className = 'status success';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载成功!</strong><br>
+                    <small>高德地图API已准备好</small>
+                `;
+                
+            } catch (error) {
+                console.error('地图初始化失败:', error);
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载失败!</strong><br>
+                    <small>错误: ${error.message}</small>
+                `;
+            }
+        }
+        
+        // 页面加载完成后初始化
+        window.addEventListener('DOMContentLoaded', async () => {
+            console.log('DOM加载完成');
+            
+            try {
+                document.getElementById('status').innerHTML = `
+                    <strong>地图加载中...</strong><br>
+                    <small>正在等待API加载...</small>
+                `;
+                
+                // 检查 API 是否加载
+                await checkApiLoaded();
+                
+                // 初始化地图
+                initMap();
+                
+            } catch (error) {
+                console.error('初始化过程失败:', error);
+                document.getElementById('status').className = 'status error';
+                document.getElementById('status').innerHTML = `
+                    <strong>初始化失败!</strong><br>
+                    <small>错误: ${error.message}</small>
+                `;
+                
+                // 尝试重新加载
+                setTimeout(() => {
+                    console.log('尝试重新加载API');
+                    window.location.reload();
+                }, 5000);
+            }
+        });
+        
+        console.log('脚本执行完成，等待页面加载');
+    </script>
+</body>
+</html>

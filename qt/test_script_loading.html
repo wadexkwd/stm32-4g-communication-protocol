@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>脚本加载测试</title>
+    <style>
+        #status {
+            padding: 10px;
+            margin: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>脚本加载测试</h1>
+    
+    <div id="status"></div>
+    
+    <script type="text/javascript">
+        function log(msg, isError) {
+            const statusDiv = document.getElementById('status');
+            const color = isError ? 'red' : 'green';
+            statusDiv.innerHTML += `[${new Date().toLocaleTimeString()}] <span style="color:${color}">${msg}</span>\n`;
+            console.log(msg);
+        }
+        
+        // 测试1: 检查是否有任何网络请求
+        const resourceObserver = new PerformanceObserver((list) => {
+            list.getEntries().forEach(entry => {
+                if (entry.entryType === 'resource' && entry.initiatorType === 'script') {
+                    log(`Script loaded: ${entry.name}`);
+                }
+            });
+        });
+        
+        resourceObserver.observe({ entryTypes: ['resource'] });
+        
+        // 测试2: 检查跨域限制
+        window.addEventListener('error', function(event) {
+            if (event.filename && event.filename.includes('amap')) {
+                log(`Error loading script: ${event.message} at ${event.filename}:${event.lineno}`, true);
+            }
+        });
+        
+        // 测试3: 尝试直接加载脚本
+        function loadScript(src, callback) {
+            log(`Attempting to load script: ${src}`);
+            
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = src;
+            script.onload = () => {
+                log(`Script loaded successfully: ${src}`);
+                callback();
+            };
+            script.onerror = (error) => {
+                log(`Script load failed: ${src} - ${error}`, true);
+                callback(error);
+            };
+            
+            document.head.appendChild(script);
+            log('Script tag added to document');
+        }
+        
+        function checkAMap() {
+            log(`AMap type: ${typeof AMap}`);
+            
+            if (typeof AMap !== 'undefined') {
+                log('✅ AMap API loaded successfully');
+                
+                try {
+                    const map = new AMap.Map('map-container', {
+                        center: [116.397428, 39.90923],
+                        zoom: 10
+                    });
+                    
+                    log('✅ Map instance created');
+                } catch (e) {
+                    log(`❌ Error creating map: ${e.message}`, true);
+                }
+            } else {
+                log('❌ AMap API not loaded', true);
+            }
+        }
+        
+        // 主测试流程
+        log('=== Start test ===');
+        
+        // 检查基本信息
+        log(`User Agent: ${navigator.userAgent}`);
+        log(`Online: ${navigator.onLine}`);
+        log(`Protocol: ${location.protocol}`);
+        
+        // 设置安全配置
+        if (!window._AMapSecurityConfig) {
+            window._AMapSecurityConfig = {
+                securityJsCode: "dd1127e11e1f2d5504a2f2ec9824eb78"
+            };
+            log(`Security config set: ${JSON.stringify(window._AMapSecurityConfig)}`);
+        }
+        
+        // 尝试加载高德地图API
+        const apiUrl = "https://webapi.amap.com/maps?v=2.0&key=431d3bb1fa78eef96736dc499113fca2";
+        
+        loadScript(apiUrl, () => {
+            log('=== Script load callback ===');
+            checkAMap();
+        });
+        
+        // 超时检查
+        setTimeout(() => {
+            log('=== Timeout (3000ms) ===');
+            checkAMap();
+        }, 3000);
+    </script>
+    
+    <!-- 地图容器 -->
+    <div id="map-container" style="width: 600px; height: 400px; margin-top: 20px; border: 1px solid #ddd;"></div>
+</body>
+</html>

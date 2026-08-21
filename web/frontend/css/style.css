@@ -36,6 +36,7 @@ body {
 .status { font-weight: bold; }
 .status.ok { color: #2e9e44; }
 .status.bad { color: #cc3333; }
+.status.idle { color: #999; }
 .mqtt-status { color: #888; font-size: 12px; max-width: 420px; }
 
 /* ---------- 按钮 ---------- */
@@ -49,6 +50,8 @@ body {
 .btn:hover:not(:disabled) { background: #f0f0f0; }
 .btn.primary { background: #1a73c6; border-color: #1a73c6; color: #fff; }
 .btn.primary:hover:not(:disabled) { background: #155da1; }
+.btn.danger { background: #c64444; border-color: #c64444; color: #fff; }
+.btn.danger:hover { background: #a83636; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ---------- 标签页 ---------- */
@@ -200,3 +203,50 @@ td.empty { text-align: center; color: #aaa; padding: 40px 0; }
     border-radius: 4px;
 }
 .history-count { color: #888; font-size: 12px; }
+
+/* ---------- 数据看板 ---------- */
+.dash-content { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.refresh-hint { color: #999; font-size: 12px; }
+
+.dash-cards { display: flex; gap: 12px; flex-wrap: wrap; }
+.dash-retention {
+    background: #fff; border: 1px solid #e0e0e0; border-radius: 6px;
+    padding: 8px 14px; color: #666; font-size: 12px;
+}
+.dash-card {
+    flex: 1 1 160px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 14px 18px;
+}
+.dash-card .card-name { color: #888; font-size: 13px; }
+.dash-card .card-value { font-size: 30px; font-weight: bold; font-family: Consolas, monospace; }
+
+.dash-main { display: flex; gap: 12px; flex: 1; min-height: 420px; }
+.dash-map-wrap { flex: 1.4; display: flex; flex-direction: column; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; }
+.dash-map { flex: 1; min-height: 360px; border: 1px solid #eee; border-radius: 4px; }
+.dash-table-wrap { flex: 1; display: flex; flex-direction: column; }
+.dash-table-inner { flex: 1; min-height: 200px; max-height: 260px; }
+.dash-chart { height: 180px; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; }
+
+.panel-title {
+    font-size: 13px; font-weight: bold; color: #445;
+    padding: 4px 2px 8px;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.panel-title .legend { font-weight: normal; font-size: 12px; color: #888; display: flex; align-items: center; gap: 4px; }
+.legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 2px 0 8px; }
+.legend .dot.online { background: #d4f0da; border: 2px solid #2e9e44; }
+.legend .dot.offline { background: #eeeeee; border: 2px solid #999; }
+.legend .dot.alarm { background: #fff; border: 2px solid #cc3333; }
+.legend .dot.poweron { background: #fff; border: 2px solid #b8860b; }
+
+.tag {
+    display: inline-block; padding: 1px 8px; border-radius: 10px;
+    font-size: 12px; margin-right: 4px;
+}
+.tag-online { background: #e2f5e6; color: #2e9e44; }
+.tag-offline { background: #f0f0f0; color: #999; }
+.tag-alarm { background: #fdeaea; color: #cc3333; font-weight: bold; }
+tr.clickable { cursor: pointer; }

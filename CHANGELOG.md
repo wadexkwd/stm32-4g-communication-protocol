@@ -13,10 +13,23 @@
   - 已用 `simulator/main_simulation.py` 完成全链路验证（入库 800+ 条、WS 推送、按设备过滤、CSV 导出均通过）
   - 详见 `web/README.md`
 - 根目录 `README.md`：项目结构说明、运行入口（含 Web 版启动方式）、已知事项
-- `.gitignore`：忽略 `__pycache__/`、`*.pyc`、`*.db`、`*.xls`
+- `.gitignore`：忽略 `__pycache__/`、`*.pyc`、`*.db`、`*.xls`、`web/backend/archive/`
+- **Web 版功能增强**（同日第二批改动）：
+  - **设备连接控制**：默认不连接，须在下拉框选定设备后点「连接设备」才读取该设备数据（断开后端推送省流量），可手动断开；切换设备自动断开，连接始终为显式动作
+  - **数据看板页**（`dashboard.html`，主页按钮跳转）：设备总数/在线/离线汇总卡片、24h 超时告警与上电重启统计、设备位置分布地图（在线绿/离线灰/告警红描边，点击定位）、设备情况总览表、近 24h 异常事件按小时分布堆叠柱状图
+  - **数据保留策略**（`backend/retention.py`）：默认保留 30 天，过期数据先流式归档为 CSV.gz（`archive/` 目录）再删除并 VACUUM 回收空间；归档失败则跳过删除（宁占盘不丢数）；配置见 `config.py`（`RETENTION_DAYS=0` 可关闭）
+  - 看板新增存储状态：库内总记录/数据库体积卡片 + 保留策略与最近清理状态行
+  - Vue 3.4.38 / ECharts 5.5.0 下载至 `web/frontend/vendor/` 本地引用，摆脱 jsdelivr CDN 依赖（内网可部署）
+  - 新增接口：`GET /api/dashboard`（设备/异常/存储/保留策略聚合）、数据库层新增保留策略支撑查询
 
 ### 变更
 
+- **Web 前端性能优化**（修复页面持续运行时 CPU 占用过高、整机卡顿）：
+  - 修复首屏白屏 bug：模板绑定的 `filteredRows` 未从 setup 返回，渲染抛 TypeError 导致根节点为空
+  - 攒批节流：WS 数据先进缓冲，UI 每 1 秒统一刷新一次（原为逐条插入表格/逐点全量重绘图表，约 50 次 setOption+10 次全表重排每秒）
+  - 数据容器改 `shallowRef`，避免 500 条 × 20 字段的深层响应式代理开销
+  - 只重绘当前 Tab 可见的图表；表格仅在「数据总览」页激活时更新 DOM（切换 Tab 时补绘/补触发）
+  - 表格可见行数 500 -> 50；单元格格式化弃用 `toLocaleString`
 - **项目目录结构整理**（`git mv` 移动，保留历史）：
   - 根目录 40+ 测试脚本归类至 `tests/protocol/`（C 协议帧测试）、`tests/precision/`（精度/解析测试）、`tests/simulation/`（模拟器/上位机冒烟）、`tests/data/`（测试数据）
   - 模拟器移至 `simulator/`，辅助脚本移至 `tools/`（mqtt_listener、串口/Excel 检查、GitHub 仓库管理等）

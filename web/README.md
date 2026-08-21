@@ -44,14 +44,14 @@ web/
 
 ## 接口
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | /api/config | 字段名/单位/分类/事件类型等展示配置 |
-| GET | /api/status | 后端 MQTT 连接状态 |
-| GET | /api/devices | 设备列表（IMEI + 最近上报时间 + 记录数） |
-| GET | /api/history | 历史查询：imei / start / end / event / limit / offset |
-| GET | /api/export.csv | CSV 导出（带 BOM，Excel 可直接打开） |
-| WS | /ws | 实时数据推送；客户端发 `{"imei": "xxx"}` 切换关注设备 |
+| 方法  | 路径              | 说明                                               |
+| --- | --------------- | ------------------------------------------------ |
+| GET | /api/config     | 字段名/单位/分类/事件类型等展示配置                              |
+| GET | /api/status     | 后端 MQTT 连接状态                                     |
+| GET | /api/devices    | 设备列表（IMEI + 最近上报时间 + 记录数）                        |
+| GET | /api/history    | 历史查询：imei / start / end / event / limit / offset |
+| GET | /api/export.csv | CSV 导出（带 BOM，Excel 可直接打开）                        |
+| WS  | /ws             | 实时数据推送；客户端发 `{"imei": "xxx"}` 切换关注设备             |
 
 ## 验证
 

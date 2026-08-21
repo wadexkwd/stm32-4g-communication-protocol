@@ -53,7 +53,7 @@ const ChartManager = {
         this.buffers[key] = { times: [], series: Object.fromEntries(fields.map(f => [f, []])) };
     },
 
-    /** 追加一个数据点（timestamp 为时间标签） */
+    /** 追加一个数据点（timestamp 为时间标签）。仅写缓冲区，不触发重绘 */
     push(key, timestamp, valuesByField) {
         const buf = this.buffers[key];
         if (!buf) return;
@@ -66,7 +66,18 @@ const ChartManager = {
             buf.times.shift();
             for (const field in buf.series) buf.series[field].shift();
         }
-        this._render(key);
+    },
+
+    /**
+     * 把缓冲区渲染到图表（由调用方节流，例如每 500ms 一次；
+     * 不传 key 则刷新全部图表）
+     */
+    flush(key) {
+        if (key !== undefined) {
+            this._render(key);
+            return;
+        }
+        Object.keys(this.buffers).forEach(k => this._render(k));
     },
 
     /** 清空某图表（切换设备时调用） */

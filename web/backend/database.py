@@ -10,7 +10,7 @@
 
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from config import DATABASE_FILE, DB_COLUMNS
 
@@ -152,3 +152,139 @@ class Database:
     def get_latest_by_device(self, imei, limit=1):
         """获取设备最近 N 条数据（用于前端进入页面时的初始展示）"""
         return self.query_data(imei=imei, limit=limit)
+
+    def get_latest_rows_by_device(self):
+        """每个设备最新一条数据（含位置/事件/版本），用于数据看板"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute('''
+                    SELECT s.* FROM sensor_data s
+                    JOIN (SELECT imei, MAX(id) AS mid FROM sensor_data GROUP BY imei) t
+                      ON s.id = t.mid
+                    ORDER BY s.received_time DESC
+                ''').fetchall()
+                return [dict(row) for row in rows]
+            finally:
+                conn.close()
+
+    def get_recent_event_counts(self, hours=24):
+        """近 N 小时各设备异常事件计数：{imei: {'POWER_ON': n, 'SENSOR_REPORT_TIMEOUT': m}}"""
+        since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute('''
+                    SELECT imei, event, COUNT(*) AS cnt FROM sensor_data
+                    WHERE event IN ('POWER_ON', 'SENSOR_REPORT_TIMEOUT')
+                      AND received_time >= ?
+                    GROUP BY imei, event
+                ''', (since,)).fetchall()
+                result = {}
+                for row in rows:
+                    result.setdefault(row['imei'], {})[row['event']] = row['cnt']
+                return result
+            finally:
+                conn.close()
+
+    def get_recent_volume(self, hours=24):
+        """近 N 小时各设备上报记录数：{imei: count}"""
+        since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute('''
+                    SELECT imei, COUNT(*) AS cnt FROM sensor_data
+                    WHERE received_time >= ?
+                    GROUP BY imei
+                ''', (since,)).fetchall()
+                return {row['imei']: row['cnt'] for row in rows}
+            finally:
+                conn.close()
+
+    def get_recent_events_hourly(self, hours=24):
+        """近 N 小时异常事件按小时计数：{ 'YYYY-MM-DD HH:00': {'SENSOR_REPORT_TIMEOUT': n, 'POWER_ON': m} }"""
+        since = (datetime.now() - timedelta(hours=hours)).strftime('%Y-%m-%d %H:%M:%S')
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute('''
+                    SELECT strftime('%Y-%m-%d %H:00', received_time) AS hour, event, COUNT(*) AS cnt
+                    FROM sensor_data
+                    WHERE event IN ('POWER_ON', 'SENSOR_REPORT_TIMEOUT') AND received_time >= ?
+                    GROUP BY hour, event
+                    ORDER BY hour
+                ''', (since,)).fetchall()
+                result = {}
+                for row in rows:
+                    result.setdefault(row['hour'], {})[row['event']] = row['cnt']
+                return result
+            finally:
+                conn.close()
+
+    # ------------------------------------------------------------------ 保留策略支撑
+    def count_before(self, cutoff_time):
+        """统计早于指定时间（含）的记录数"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                return conn.execute(
+                    'SELECT COUNT(*) FROM sensor_data WHERE received_time < ?',
+                    (cutoff_time,)).fetchone()[0]
+            finally:
+                conn.close()
+
+    def iter_rows_before(self, cutoff_time):
+        """流式迭代早于指定时间的记录（逐批 yield，避免大结果集占内存）"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                cursor = conn.execute(
+                    'SELECT * FROM sensor_data WHERE received_time < ? ORDER BY id',
+                    (cutoff_time,))
+                while True:
+                    batch = cursor.fetchmany(5000)
+                    if not batch:
+                        break
+                    for row in batch:
+                        yield dict(row)
+            finally:
+                conn.close()
+
+    def delete_before(self, cutoff_time):
+        """删除早于指定时间的记录，返回删除行数"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                cursor = conn.execute(
+                    'DELETE FROM sensor_data WHERE received_time < ?',
+                    (cutoff_time,))
+                conn.commit()
+                return cursor.rowcount
+            finally:
+                conn.close()
+
+    def vacuum(self):
+        """回收已删除数据的空间（VACUUM 会短暂阻塞写入，在清理任务里低频调用）"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute('VACUUM')
+            finally:
+                conn.close()
+
+    def get_storage_stats(self):
+        """存储统计：总行数/最早记录/文件大小"""
+        import os
+        with self._lock:
+            conn = self._connect()
+            try:
+                total, oldest = conn.execute(
+                    'SELECT COUNT(*), MIN(received_time) FROM sensor_data').fetchone()
+            finally:
+                conn.close()
+        try:
+            size_mb = round(os.path.getsize(self.db_file) / 1024 / 1024, 2)
+        except OSError:
+            size_mb = None
+        return {'total_rows': total, 'oldest_time': oldest, 'db_size_mb': size_mb}

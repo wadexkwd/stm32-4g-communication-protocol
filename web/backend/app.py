@@ -18,6 +18,7 @@ import asyncio
 import csv
 import io
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
@@ -25,9 +26,11 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from config import (WEB_HOST, WEB_PORT, FRONTEND_DIR, FIELD_ORDER, FIELD_NAMES,
-                    EVENT_TYPES, FIELD_UNITS, FIELD_CATEGORIES, CHARTS)
+                    EVENT_TYPES, FIELD_UNITS, FIELD_CATEGORIES, CHARTS,
+                    RETENTION_DAYS, ARCHIVE_ENABLED)
 from database import Database
 from mqtt_service import MqttService
+from retention import RetentionService
 
 
 # =============================================================================
@@ -35,6 +38,7 @@ from mqtt_service import MqttService
 # =============================================================================
 database = Database()
 mqtt_service = None          # lifespan 中创建
+retention_service = None     # lifespan 中创建
 main_loop = None             # 主事件循环，供 MQTT 线程投递广播任务
 
 # 已连接的 WebSocket 客户端：{websocket: 关注的imei(None表示全部)}
@@ -63,12 +67,15 @@ async def _do_broadcast(imei, items):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global mqtt_service, main_loop
+    global mqtt_service, retention_service, main_loop
     main_loop = asyncio.get_running_loop()
     mqtt_service = MqttService(database, on_data=broadcast_data)
     mqtt_service.start()
+    retention_service = RetentionService(database)
+    retention_service.start()
     yield
     mqtt_service.stop()
+    retention_service.stop()
 
 
 app = FastAPI(title="应急跌落事件监控系统 Web后端", lifespan=lifespan)
@@ -151,6 +158,74 @@ async def api_export_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"},
     )
+
+
+@app.get("/api/dashboard")
+async def api_dashboard(online_sec: int = Query(60, ge=5, description="最后上报距今多少秒内视为在线")):
+    """数据看板：设备总数/在线状态/最新位置/异常事件统计"""
+    devices = database.get_devices()
+    latest = {row['imei']: row for row in database.get_latest_rows_by_device()}
+    events_24h = database.get_recent_event_counts(24)
+    volume_24h = database.get_recent_volume(24)
+    events_hourly = database.get_recent_events_hourly(24)
+
+    now = datetime.now()
+    result = []
+    online_count = 0
+    alarm_24h_total = 0
+    poweron_24h_total = 0
+    for d in devices:
+        imei = d['imei']
+        last = latest.get(imei, {})
+        # 在线判断：最后上报时间距今小于 online_sec 秒
+        online = False
+        try:
+            last_dt = datetime.strptime(d['last_time'], '%Y-%m-%d %H:%M:%S.%f')
+            online = (now - last_dt).total_seconds() < online_sec
+        except (ValueError, TypeError):
+            pass
+        ev = events_24h.get(imei, {})
+        timeout_cnt = ev.get('SENSOR_REPORT_TIMEOUT', 0)
+        poweron_cnt = ev.get('POWER_ON', 0)
+        alarm_24h_total += timeout_cnt
+        poweron_24h_total += poweron_cnt
+        if online:
+            online_count += 1
+        result.append({
+            'imei': imei,
+            'online': online,
+            'last_time': d['last_time'],
+            'total_count': d['count'],
+            'volume_24h': volume_24h.get(imei, 0),
+            'timeout_24h': timeout_cnt,
+            'poweron_24h': poweron_cnt,
+            'version': last.get('version', ''),
+            'last_event': last.get('event', ''),
+            'last_sensor_time': last.get('timestamp', ''),
+            'longitude': last.get('longitude'),
+            'latitude': last.get('latitude'),
+            'altitude': last.get('altitude'),
+            'pressure': last.get('pressure'),
+        })
+
+    return {
+        'total': len(result),
+        'online': online_count,
+        'offline': len(result) - online_count,
+        'alarm_24h': alarm_24h_total,
+        'poweron_24h': poweron_24h_total,
+        'online_sec': online_sec,
+        'devices': result,
+        # 近24h异常事件按小时分布（时间轴）：{ 'YYYY-MM-DD HH:00': {事件类型: 次数} }
+        'events_hourly': events_hourly,
+        # 存储与保留策略状态
+        'storage': database.get_storage_stats(),
+        'retention': {
+            'days': RETENTION_DAYS,
+            'archive_enabled': ARCHIVE_ENABLED,
+            'last_run': retention_service.last_result if retention_service else None,
+        },
+    }
 
 
 # =============================================================================

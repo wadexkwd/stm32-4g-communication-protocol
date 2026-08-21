@@ -14,6 +14,7 @@ createApp({
         const config = reactive({ fieldOrder: [], fieldNames: {}, fieldUnits: {}, eventTypes: {}, fieldCategories: {}, charts: {} });
         const devices = ref([]);
         const currentImei = ref('');
+        const connected = ref(false);       // 是否已连接设备（默认不连接，手动点按钮才连）
         const eventFilter = ref('');
         const activeTab = ref('overview');
         const wsConnected = ref(false);
@@ -21,7 +22,7 @@ createApp({
         const lastUpdate = ref('');
         const latestValues = reactive({ pressure: null, altitude: null });
 
-        const rows = ref([]);           // 实时数据（新数据置顶）
+        const rows = Vue.shallowRef([]);   // 实时数据（新数据置顶）。shallowRef 避免上万字段深层代理开销
         const maxRows = 500;
         let rowKeySeq = 0;
 
@@ -96,8 +97,8 @@ createApp({
 
             ws.onopen = () => {
                 wsConnected.value = true;
-                // 同步当前关注的设备
-                ws.send(JSON.stringify({ imei: currentImei.value || null }));
+                // 同步当前连接状态（未连接则推送哨兵，让后端停止推送）
+                syncWatchImei();
             };
             ws.onmessage = (ev) => {
                 const msg = JSON.parse(ev.data);
@@ -117,12 +118,38 @@ createApp({
 
         function syncWatchImei() {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ imei: currentImei.value || null }));
+                // 未连接时用哨兵值让后端停止向本客户端推送
+                ws.send(JSON.stringify({ imei: connected.value ? currentImei.value : '__paused__' }));
             }
         }
 
+        // ------------------------------------------------------------------ 连接控制
+        /** 连接设备：必须先在下拉框选中某个设备 */
+        function connectDevice() {
+            if (!currentImei.value || connected.value) return;
+            connected.value = true;
+            syncWatchImei();
+            // 连接后预取该设备最近数据，立即有内容可看
+            prefill();
+        }
+
+        /** 断开连接：停止接收数据，已显示的内容保留 */
+        function disconnectDevice() {
+            if (!connected.value) return;
+            connected.value = false;
+            pendingItems = [];
+            syncWatchImei();
+        }
+
         // ------------------------------------------------------------------ 数据处理
+        // 攒批缓冲：WS 收到的数据先进缓冲，UI 每 UI_FLUSH_MS 毫秒统一刷新一次，
+        // 避免逐条插入表格/逐点重绘图表造成高 CPU 占用
+        let pendingItems = [];
+        const UI_FLUSH_MS = 1000;
+
         function handleIncoming(imei, items) {
+            // 未连接设备时不处理任何数据（后端持续入库不受影响）
+            if (!connected.value) return;
             lastUpdate.value = new Date().toLocaleTimeString();
 
             // 设备列表懒更新：新设备出现时刷新下拉
@@ -131,32 +158,56 @@ createApp({
             }
 
             if (currentImei.value && imei !== currentImei.value) return;
+            pendingItems.push(...items);
+        }
 
-            // 新数据置顶
-            const stamped = items.map(item => ({ ...item, _key: ++rowKeySeq }));
-            rows.value.unshift(...stamped);
+        /** 定时批量刷新表格/曲线/地图（每 UI_FLUSH_MS 一次） */
+        function flushPending() {
+            if (!pendingItems.length) return;
+            const items = pendingItems;
+            pendingItems = [];
+
+            // 表格：新数据置顶（仅当"数据总览"页可见时才触发渲染，
+            // 其他 Tab 下只写数组不重绘，切回时在 switchTab 里补触发）
+            rows.value.unshift(...items.map(item => ({ ...item, _key: ++rowKeySeq })));
             if (rows.value.length > maxRows) {
                 rows.value.length = maxRows;
             }
+            if (activeTab.value === 'overview') {
+                Vue.triggerRef(rows);
+            }
 
-            // 曲线 + 地图 + 数值卡片（按时间顺序逐点推进）
+            // 曲线：逐点写入缓冲，只重绘当前 Tab 可见的图表
+            let lastItem = null;
             for (const item of items) {
+                lastItem = item;
                 const ts = String(item.timestamp || '').slice(11, 19) || new Date().toLocaleTimeString();
-                // 所有已初始化的图表都推数据，切回时不缺曲线
                 for (const chartKey of initedCharts) {
                     ChartManager.push(chartKey, ts, item);
                 }
-                if (item.pressure !== undefined && item.pressure !== '') latestValues.pressure = item.pressure;
-                if (item.altitude !== undefined && item.altitude !== '') latestValues.altitude = item.altitude;
-                if (item.longitude && item.latitude && activeTab.value === 'location') {
-                    MapView.updateLocation(parseFloat(item.latitude), parseFloat(item.longitude));
+            }
+            for (const [chartKey] of (tabCharts[activeTab.value] || [])) {
+                ChartManager.flush(chartKey);
+            }
+
+            // 数值卡片 + 地图（每周期只刷一次，用最新一条）
+            if (lastItem) {
+                if (lastItem.pressure !== undefined && lastItem.pressure !== '') latestValues.pressure = lastItem.pressure;
+                if (lastItem.altitude !== undefined && lastItem.altitude !== '') latestValues.altitude = lastItem.altitude;
+                if (lastItem.longitude && lastItem.latitude && activeTab.value === 'location') {
+                    MapView.updateLocation(parseFloat(lastItem.latitude), parseFloat(lastItem.longitude));
                 }
             }
         }
 
         // ------------------------------------------------------------------ 事件处理
         function onDeviceChange() {
+            // 切换设备时自动断开，需重新点"连接设备"（连接必须是显式动作）
+            if (connected.value) {
+                disconnectDevice();
+            }
             rows.value = [];
+            pendingItems = [];
             ChartManager.clearAll();
             MapView.reset();
             latestValues.pressure = null;
@@ -186,6 +237,9 @@ createApp({
                             lastPrefillPosition = { lat: parseFloat(item.latitude), lon: parseFloat(item.longitude) };
                         }
                     }
+                    for (const [ck] of (tabCharts[activeTab.value] || [])) {
+                        ChartManager.flush(ck);
+                    }
                     if (lastPrefillPosition) {
                         MapView.updateLocation(lastPrefillPosition.lat, lastPrefillPosition.lon);
                     }
@@ -198,6 +252,10 @@ createApp({
             activeTab.value = key;
             // 图表/地图容器从 display:none 变可见后需要重算尺寸
             requestAnimationFrame(() => {
+                // 切回数据总览：补触发表格渲染（其他 Tab 期间数据只写数组没重绘）
+                if (key === 'overview') {
+                    Vue.triggerRef(rows);
+                }
                 if (tabCharts[key]) {
                     for (const [chartKey, elId, fields] of tabCharts[key]) {
                         if (!initedCharts.has(chartKey)) {
@@ -209,6 +267,9 @@ createApp({
                             initedCharts.add(chartKey);
                             // 用已有实时数据回填曲线
                             replayRows(chartKey);
+                        } else {
+                            // 该图表在前台期间数据只进了缓冲，切回来立即补绘
+                            ChartManager.flush(chartKey);
                         }
                         ChartManager.resize(chartKey);
                     }
@@ -231,6 +292,7 @@ createApp({
                 const ts = String(item.timestamp || '').slice(11, 19);
                 ChartManager.push(chartKey, ts, item);
             }
+            ChartManager.flush(chartKey);
         }
 
         // ------------------------------------------------------------------ 历史查询
@@ -262,32 +324,45 @@ createApp({
             return v ? v.replace('T', ' ') + ':00' : '';
         }
 
+        /** 跳转数据看板页 */
+        function goDashboard() {
+            location.href = '/dashboard.html';
+        }
+
         // ------------------------------------------------------------------ 展示辅助
+        // 表格只渲染最新 VISIBLE_ROWS 条（数据保留 maxRows 条），控制 DOM 规模
+        const VISIBLE_ROWS = 50;
         const filteredRows = Vue.computed(() => {
-            if (!eventFilter.value) return rows.value;
-            return rows.value.filter(r => r.event === eventFilter.value);
+            const list = eventFilter.value
+                ? rows.value.filter(r => r.event === eventFilter.value)
+                : rows.value;
+            return list.slice(0, VISIBLE_ROWS);
         });
 
         function formatCell(v) {
             if (v === null || v === undefined || v === '') return '-';
             if (typeof v === 'number') {
-                // 保留合理精度，避免浮点长尾
-                return Math.abs(v) >= 1000 ? v.toLocaleString('zh-CN')
-                     : (Number.isInteger(v) ? v : parseFloat(v.toFixed(6)));
+                // 保留合理精度，避免浮点长尾（不用 toLocaleString，ICU 格式化开销大）
+                return Number.isInteger(v) ? String(v) : String(parseFloat(v.toFixed(6)));
             }
             if (typeof v === 'string' && config.eventTypes[v]) return config.eventTypes[v];
             return v;
         }
 
         // ------------------------------------------------------------------ 挂载
-        Vue.onMounted(init);
+        Vue.onMounted(() => {
+            init();
+            // UI 统一节流刷新
+            setInterval(flushPending, UI_FLUSH_MS);
+        });
 
         return {
-            config, devices, currentImei, eventFilter, activeTab, tabs,
+            config, devices, currentImei, connected, eventFilter, activeTab, tabs,
             wsConnected, mqttStatus, lastUpdate, latestValues,
-            rows: filteredRows, maxRows,
+            filteredRows, maxRows,
             historyStart, historyEnd, historyEvent, historyRows, historyTotal, historyQueried,
-            onDeviceChange, switchTab, loadDevices, queryHistory, exportCsv, formatCell,
+            connectDevice, disconnectDevice,
+            onDeviceChange, switchTab, loadDevices, queryHistory, exportCsv, formatCell, goDashboard,
         };
     },
 }).mount('#app');

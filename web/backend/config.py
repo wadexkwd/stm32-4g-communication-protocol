@@ -27,6 +27,13 @@ DATABASE_FILE = os.path.join(_DATABASE_DIR, "sensor_data.db")
 WEB_HOST = "0.0.0.0"
 WEB_PORT = 8000
 
+# 数据保留策略（长期运行防库无限膨胀）
+RETENTION_DAYS = 30          # 保留最近 N 天数据，0 表示永久保留（不清理）
+ARCHIVE_ENABLED = True       # 删除前是否归档为 CSV.gz（存放到 ARCHIVE_DIR）
+ARCHIVE_DIR = os.path.join(_DATABASE_DIR, "archive")
+RETENTION_INTERVAL_SEC = 24 * 3600   # 清理任务执行间隔（默认每天一次）
+RETENTION_START_DELAY_SEC = 60       # 服务启动后延迟多少秒执行第一次清理
+
 # 前端静态文件目录
 FRONTEND_DIR = os.path.normpath(os.path.join(_DATABASE_DIR, "..", "frontend"))
 

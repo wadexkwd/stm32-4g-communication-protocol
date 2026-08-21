@@ -5,6 +5,14 @@
 
 服务器环境：Windows Server 2022 数据中心版，2核 / 2GB 内存 / 50GB 硬盘，已运行 mosquitto。
 
+## 整体流程速览
+
+```
+装 Python -> 拷代码 -> 改配置(MQTT地址/密码/密钥) -> pip install -> 试运行验证
+-> 开防火墙(8000) -> NSSM 注册服务 -> 收紧 mosquitto 认证 -> 上线检查
+（备案通过后：域名 + Caddy HTTPS）
+```
+
 ## 一、安装 Python
 
 1. 下载 Python 3.11+（Windows installer 64-bit）：https://www.python.org/downloads/windows/
@@ -86,7 +94,70 @@ C:\tools\nssm.exe stop dwdl-web        :: 停止
 C:\tools\nssm.exe remove dwdl-web confirm   :: 卸载服务
 ```
 
-## 七、上线检查清单
+## 七、收紧 mosquitto 认证（强烈建议）
+
+**现状风险**：mosquitto 当前无密码（`allow_anonymous` 默认放行），1883 端口暴露公网--
+任何人扫到 IP 都能连上来**收听全部设备数据（含人员位置）甚至伪造下发消息**。
+Web 加了登录页只是保护了展示层，MQTT 这扇门也要锁上。
+
+### 7.1 创建账号密码文件
+
+mosquitto 安装目录（默认 `C:\Program Files\mosquitto\`）下，管理员命令行执行：
+
+```bat
+cd "C:\Program Files\mosquitto"
+mosquitto_passwd.exe -c C:\dwdl\mosquitto_pw dwdl
+```
+
+（`dwdl` 为用户名，按提示输入两遍密码；密码文件放 `C:\dwdl\mosquitto_pw`，
+不要放在 mosquitto 安装目录，升级时不易丢失。）
+
+### 7.2 修改 mosquitto.conf
+
+编辑 `C:\Program Files\mosquitto\mosquitto.conf`，追加：
+
+```
+allow_anonymous false
+password_file C:\dwdl\mosquitto_pw
+```
+
+### 7.3 重启 mosquitto
+
+```bat
+net stop mosquitto && net start mosquitto
+```
+
+（若是手动运行的进程，先 taskkill 再重新启动；如果 mosquitto 未注册为服务：
+`sc create mosquitto binPath= "C:\Program Files\mosquitto\mosquitto.exe" start= auto`）
+
+### 7.4 所有 MQTT 客户端同步配置（重要！）
+
+开启认证后，**所有**连这个 broker 的客户端都要带账号密码，改完各自配置后重启：
+
+| 客户端 | 配置位置 | 字段 |
+|---|---|---|
+| Web 后端 | `web/backend/config.py` | `MQTT_USERNAME` / `MQTT_PASSWORD`（重启服务） |
+| 终端固件 | `device/main.py` | `MQTT_USERNAME` / `MQTT_PASSWORD`（需重新烧录/下载到 EC800M） |
+| 本地 Web 版 | 本地 `web/backend/config.py` | 同上 |
+| qt 上位机 | `qt/config.py` | `MQTT_USERNAME` / `MQTT_PASSWORD` |
+| 模拟器 | `simulator/main_simulation.py` | 对应 USERNAME/PASSWORD 变量 |
+
+> 注意终端固件升级窗口：设备在野外时改了 broker 认证会导致其掉线无法上报，
+> 建议在设备可统一维护的时间窗口操作；或先用 mosquitto 的
+> `per_listener_settings` 双监听（老端口匿名一段时间）做灰度过渡。
+
+### 7.5 验证
+
+```bat
+:: 无密码应被拒
+mosquitto_sub.exe -h 127.0.0.1 -t "up/#" -C 1
+:: 带密码应能收到数据
+mosquitto_sub.exe -h 127.0.0.1 -u dwdl -P 密码 -t "up/#" -C 1
+```
+
+浏览器刷新 Web 页面，确认实时数据仍在滚动（即 Web 后端已用新账号连上）。
+
+## 八、上线检查清单
 
 - [ ] `config.py` 中 MQTT_BROKER 已改 127.0.0.1
 - [ ] WEB_PASSWORD / SESSION_SECRET 已改为强随机值
@@ -94,6 +165,7 @@ C:\tools\nssm.exe remove dwdl-web confirm   :: 卸载服务
 - [ ] 防火墙 + 云安全组已放行 8000
 - [ ] 浏览器能登录并看到实时数据
 - [ ] 数据看板显示存储状态正常
+- [ ] mosquitto 认证已收紧（第七节），所有客户端已同步账号并验证上报正常
 - [ ] 磁盘水位：50GB 盘 + 30 天保留策略足够（1 台设备约 5GB 热数据）；设备增多时
       注意 `archive/` 目录增长，可定期清理最老的归档
 

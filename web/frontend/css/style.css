@@ -1,0 +1,202 @@
+/* 应急跌落事件监控系统 - Web前端样式 */
+[v-cloak] { display: none; }
+
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+    background: #f0f2f5;
+    color: #333;
+    font-size: 14px;
+}
+
+/* ---------- 顶部控制区 ---------- */
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    background: #fff;
+    border-bottom: 1px solid #e0e0e0;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.topbar .title { font-size: 17px; font-weight: bold; color: #1a3c6e; margin-right: 16px; }
+.topbar label { color: #666; }
+.topbar select {
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    min-width: 160px;
+    background: #fff;
+}
+.status { font-weight: bold; }
+.status.ok { color: #2e9e44; }
+.status.bad { color: #cc3333; }
+.mqtt-status { color: #888; font-size: 12px; max-width: 420px; }
+
+/* ---------- 按钮 ---------- */
+.btn {
+    padding: 5px 14px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: #f0f0f0; }
+.btn.primary { background: #1a73c6; border-color: #1a73c6; color: #fff; }
+.btn.primary:hover:not(:disabled) { background: #155da1; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ---------- 标签页 ---------- */
+.tabs {
+    display: flex;
+    gap: 2px;
+    background: #fff;
+    padding: 0 12px;
+    border-bottom: 1px solid #e0e0e0;
+}
+.tabs button {
+    padding: 9px 18px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666;
+    border-bottom: 2px solid transparent;
+}
+.tabs button.active {
+    color: #1a73c6;
+    font-weight: bold;
+    border-bottom-color: #1a73c6;
+}
+.tabs button:hover { color: #1a73c6; }
+
+/* ---------- 内容区 ---------- */
+.content { padding: 12px 16px; height: calc(100vh - 108px); }
+.tab-panel { height: 100%; display: flex; flex-direction: column; gap: 10px; }
+
+.table-info { color: #888; display: flex; justify-content: space-between; }
+
+.table-wrap {
+    flex: 1;
+    overflow: auto;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+thead th {
+    position: sticky;
+    top: 0;
+    background: #f5f7fa;
+    padding: 8px 10px;
+    border-bottom: 1px solid #ddd;
+    white-space: nowrap;
+    text-align: left;
+    color: #445;
+}
+tbody td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    white-space: nowrap;
+    font-family: Consolas, "Courier New", monospace;
+}
+tbody tr:nth-child(even) { background: #fafbfc; }
+tbody tr:hover { background: #eef4fb; }
+tr.row-poweron td { color: #b8860b; font-weight: bold; }
+tr.row-timeout td { color: #cc3333; font-weight: bold; }
+td.empty { text-align: center; color: #aaa; padding: 40px 0; }
+
+/* ---------- 图表 ---------- */
+.chart-full { flex: 1; min-height: 300px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; }
+.chart-row { flex: 1; display: flex; gap: 10px; min-height: 300px; }
+.chart-half { flex: 1; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; }
+
+/* ---------- 环境数值卡片 ---------- */
+.value-cards { display: flex; gap: 10px; }
+.card {
+    flex: 0 0 220px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px 16px;
+}
+.card-name { color: #888; font-size: 13px; }
+.card-name small { color: #aaa; }
+.card-value {
+    font-size: 26px;
+    font-weight: bold;
+    color: #0066cc;
+    font-family: Consolas, monospace;
+}
+
+/* ---------- 地图 ---------- */
+.map {
+    flex: 1;
+    background: #f0f0f0;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    position: relative;
+}
+.map .map-log {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    font-size: 12px;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0,0,0,.2);
+    max-width: 300px;
+}
+.map .map-log h4 { margin: 0 0 5px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 5px; }
+.map .map-log .entry { margin: 5px 0; color: #666; border-left: 3px solid #007bff; padding-left: 8px; }
+.map .map-log .entry .time { font-size: 10px; color: #999; }
+.map .map-info {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: white;
+    padding: 10px 15px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 1000;
+    box-shadow: 0 2px 10px rgba(0,0,0,.2);
+    color: #333;
+}
+.map .map-current {
+    position: absolute;
+    background: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #007bff;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    white-space: nowrap;
+    border: 2px solid #007bff;
+}
+
+/* ---------- 历史查询 ---------- */
+.history-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    background: #fff;
+    padding: 10px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+}
+.history-toolbar input[type="datetime-local"], .history-toolbar select {
+    padding: 4px 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.history-count { color: #888; font-size: 12px; }

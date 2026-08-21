@@ -27,6 +27,11 @@ createApp({
             loading.value = true;
             try {
                 const resp = await fetch('/api/dashboard');
+                if (resp.status === 401) {
+                    // 会话过期，跳转登录页
+                    location.href = '/login';
+                    return;
+                }
                 const data = await resp.json();
                 Object.assign(summary, {
                     total: data.total, online: data.online, offline: data.offline,

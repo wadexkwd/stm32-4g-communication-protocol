@@ -17,20 +17,24 @@
 import asyncio
 import csv
 import io
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Body, HTTPException
+from fastapi.responses import (StreamingResponse, JSONResponse, RedirectResponse,
+                               FileResponse, HTMLResponse)
 from fastapi.staticfiles import StaticFiles
 
 from config import (WEB_HOST, WEB_PORT, FRONTEND_DIR, FIELD_ORDER, FIELD_NAMES,
                     EVENT_TYPES, FIELD_UNITS, FIELD_CATEGORIES, CHARTS,
-                    RETENTION_DAYS, ARCHIVE_ENABLED)
+                    RETENTION_DAYS, ARCHIVE_ENABLED,
+                    WEB_PASSWORD, SESSION_SECRET, SESSION_TTL_HOURS)
 from database import Database
 from mqtt_service import MqttService
 from retention import RetentionService
+from auth import COOKIE_NAME, create_token, verify_token
 
 
 # =============================================================================
@@ -79,6 +83,60 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="应急跌落事件监控系统 Web后端", lifespan=lifespan)
+
+
+# =============================================================================
+# 访问认证：密码登录 + 签名Cookie会话
+# =============================================================================
+def _is_authenticated(request):
+    return verify_token(SESSION_SECRET, request.cookies.get(COOKIE_NAME))
+
+
+# 无需登录即可访问的路径（登录页自身 + 前端静态资源，页面数据全部走需认证的 API）
+_PUBLIC_PATHS = ("/login", "/api/login")
+_PUBLIC_PREFIXES = ("/css/", "/js/", "/vendor/")
+
+
+@app.middleware("http")
+async def auth_middleware(request, call_next):
+    path = request.url.path
+    if path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES):
+        return await call_next(request)
+
+    if not _is_authenticated(request):
+        # 页面请求跳转登录页；API 请求返回 401（前端收到后跳登录）
+        if path in ("/", "/index.html", "/dashboard.html"):
+            return RedirectResponse("/login")
+        if path.startswith("/api/"):
+            return JSONResponse({"detail": "未登录或会话已过期"}, status_code=401)
+    return await call_next(request)
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    """登录页（登录后跳转主页）"""
+    return FileResponse(os.path.join(FRONTEND_DIR, "login.html"))
+
+
+@app.post("/api/login")
+async def api_login(body: dict = Body(...)):
+    """密码登录：签发会话Cookie"""
+    if body.get("password") != WEB_PASSWORD:
+        raise HTTPException(status_code=401, detail="密码错误")
+    token = create_token(SESSION_SECRET, SESSION_TTL_HOURS)
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(COOKIE_NAME, token,
+                    httponly=True, samesite="lax",
+                    max_age=SESSION_TTL_HOURS * 3600)
+    return resp
+
+
+@app.post("/api/logout")
+async def api_logout():
+    """退出登录：清除会话Cookie"""
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(COOKIE_NAME)
+    return resp
 
 
 # =============================================================================
@@ -234,6 +292,10 @@ async def api_dashboard(online_sec: int = Query(60, ge=5, description="最后上
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     global main_loop
+    # WebSocket 同样要求已登录（浏览器同源请求会自动携带Cookie）
+    if not verify_token(SESSION_SECRET, ws.cookies.get(COOKIE_NAME)):
+        await ws.close(code=1008, reason="未登录")
+        return
     await ws.accept()
     # 可通过查询参数指定关注设备：/ws?imei=xxx
     watch = ws.query_params.get("imei")

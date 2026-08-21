@@ -20,7 +20,9 @@
   - **数据保留策略**（`backend/retention.py`）：默认保留 30 天，过期数据先流式归档为 CSV.gz（`archive/` 目录）再删除并 VACUUM 回收空间；归档失败则跳过删除（宁占盘不丢数）；配置见 `config.py`（`RETENTION_DAYS=0` 可关闭）
   - 看板新增存储状态：库内总记录/数据库体积卡片 + 保留策略与最近清理状态行
   - Vue 3.4.38 / ECharts 5.5.0 下载至 `web/frontend/vendor/` 本地引用，摆脱 jsdelivr CDN 依赖（内网可部署）
-  - 新增接口：`GET /api/dashboard`（设备/异常/存储/保留策略聚合）、数据库层新增保留策略支撑查询
+  - **Web 访问认证**：密码登录页 + HMAC 签名 HttpOnly Cookie 会话（12 小时），页面/API/WebSocket 全部要求登录，会话过期自动跳回登录页；公网部署前需修改 `WEB_PASSWORD`/`SESSION_SECRET`
+  - **Windows Server 部署指南**（`web/deploy/WINDOWS_SERVER.md`）：Python 安装、配置要点、防火墙/安全组、NSSM 注册 Windows 服务、备案后域名+HTTPS（Caddy）方案
+  - 新增接口：`GET /api/dashboard`（设备/异常/存储/保留策略聚合）、`POST /api/login`/`api/logout`、数据库层新增保留策略支撑查询
 
 ### 变更
 

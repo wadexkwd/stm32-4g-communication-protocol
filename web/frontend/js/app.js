@@ -60,6 +60,16 @@ createApp({
         let wsRetryTimer = null;
 
         // ------------------------------------------------------------------ 初始化
+        /** 统一API请求：会话过期(401)时跳转登录页 */
+        async function apiFetch(url, opts) {
+            const resp = await fetch(url, opts);
+            if (resp.status === 401) {
+                location.href = '/login';
+                throw new Error('未登录');
+            }
+            return resp;
+        }
+
         async function init() {
             await loadConfig();
             await loadDevices();
@@ -68,12 +78,12 @@ createApp({
         }
 
         async function loadConfig() {
-            const resp = await fetch('/api/config');
+            const resp = await apiFetch('/api/config');
             Object.assign(config, await resp.json());
         }
 
         async function loadDevices() {
-            const resp = await fetch('/api/devices');
+            const resp = await apiFetch('/api/devices');
             devices.value = await resp.json();
             // 当前设备已不在列表中则重置为全部
             if (currentImei.value && !devices.value.some(d => d.imei === currentImei.value)) {
@@ -83,7 +93,7 @@ createApp({
 
         async function pollStatus() {
             try {
-                const resp = await fetch('/api/status');
+                const resp = await apiFetch('/api/status');
                 const s = await resp.json();
                 mqttStatus.value = s.mqtt;
             } catch (e) { /* 后端不可达时静默 */ }
@@ -108,8 +118,13 @@ createApp({
                     handleIncoming(msg.imei, msg.items);
                 }
             };
-            ws.onclose = () => {
+            ws.onclose = (ev) => {
                 wsConnected.value = false;
+                // 1008 = 服务端鉴权拒绝（会话过期），跳转登录页
+                if (ev.code === 1008) {
+                    location.href = '/login';
+                    return;
+                }
                 clearTimeout(wsRetryTimer);
                 wsRetryTimer = setTimeout(connectWs, 3000);
             };
@@ -221,7 +236,7 @@ createApp({
             try {
                 const params = new URLSearchParams({ limit: '200' });
                 if (currentImei.value) params.set('imei', currentImei.value);
-                const resp = await fetch(`/api/history?${params}`);
+                const resp = await apiFetch(`/api/history?${params}`);
                 const result = await resp.json();
                 // 接口返回按时间倒序，反转为时间正序后回放
                 const ordered = (result.rows || []).slice().reverse();
@@ -303,7 +318,7 @@ createApp({
             if (historyEnd.value) params.set('end', toDbTime(historyEnd.value));
             if (historyEvent.value) params.set('event', historyEvent.value);
 
-            const resp = await fetch(`/api/history?${params}`);
+            const resp = await apiFetch(`/api/history?${params}`);
             const result = await resp.json();
             historyRows.value = result.rows || [];
             historyTotal.value = result.total;

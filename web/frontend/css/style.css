@@ -250,3 +250,34 @@ td.empty { text-align: center; color: #aaa; padding: 40px 0; }
 .tag-offline { background: #f0f0f0; color: #999; }
 .tag-alarm { background: #fdeaea; color: #cc3333; font-weight: bold; }
 tr.clickable { cursor: pointer; }
+
+/* ---------- 登录页 ---------- */
+.login-body {
+    background: linear-gradient(135deg, #1a3c6e 0%, #2c5f9e 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.login-box {
+    background: #fff;
+    border-radius: 10px;
+    padding: 36px 40px;
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.25);
+}
+.login-title { font-size: 18px; font-weight: bold; color: #1a3c6e; text-align: center; }
+.login-sub { font-size: 13px; color: #999; text-align: center; margin-top: -8px; }
+.login-box input {
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 15px;
+    outline: none;
+}
+.login-box input:focus { border-color: #1a73c6; }
+.login-error { color: #cc3333; font-size: 13px; text-align: center; }
+.login-btn { padding: 10px; font-size: 15px; }

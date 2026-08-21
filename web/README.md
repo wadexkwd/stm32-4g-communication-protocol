@@ -20,8 +20,19 @@ python app.py
 
 浏览器访问 http://127.0.0.1:8000
 
-配置（MQTT 地址、数据库路径、监听端口）见 `backend/config.py`；
+配置（MQTT 地址、数据库路径、监听端口、登录密码、数据保留策略）见 `backend/config.py`；
 `DATABASE_FILE` 可改为指向 qt 方案的 `sensor_data.db` 共用历史数据（表结构一致）。
+
+## 访问认证
+
+- 首次访问跳转登录页，输入密码（`config.py` 的 `WEB_PASSWORD`）后获得 12 小时会话（HMAC 签名 HttpOnly Cookie）
+- 所有 `/api/*`、WebSocket 及页面均要求登录；会话过期后自动跳回登录页
+- **公网部署前务必修改 `WEB_PASSWORD` 和 `SESSION_SECRET`**
+
+## 公网服务器部署
+
+部署到运行 mosquitto 的公网服务器（含 Windows Server 2022 服务注册、防火墙、
+域名+HTTPS 方案）见 `deploy/WINDOWS_SERVER.md`。
 
 ## 目录结构
 

@@ -33,7 +33,8 @@ SESSION_SECRET = "please-change-me-to-a-random-string"   # 会话签名密钥
 SESSION_TTL_HOURS = 12             # 登录会话有效期（小时）
 
 # 数据保留策略（长期运行防库无限膨胀）
-RETENTION_DAYS = 30          # 保留最近 N 天数据，0 表示永久保留（不清理）
+RETENTION_DAYS = 30          # 全局默认保留天数，0 表示永久保留（不清理）
+RETENTION_OPTIONS = [1, 3, 7, 15, 30, 180]   # 每台设备可单独选择的保留天数选项
 ARCHIVE_ENABLED = True       # 删除前是否归档为 CSV.gz（存放到 ARCHIVE_DIR）
 ARCHIVE_DIR = os.path.join(_DATABASE_DIR, "archive")
 RETENTION_INTERVAL_SEC = 24 * 3600   # 清理任务执行间隔（默认每天一次）

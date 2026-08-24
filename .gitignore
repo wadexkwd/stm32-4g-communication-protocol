@@ -6,3 +6,6 @@ __pycache__/
 *.db
 *.xls
 web/backend/archive/
+
+# 敏感信息（服务器凭据）
+SERVER_INFO.md

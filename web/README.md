@@ -9,6 +9,7 @@
 - 位置：高德地图圆形标记 + 坐标标签跟随（复用 qt 方案的 key 与刷新策略）
 - 历史查询（按设备/时间段/事件类型）+ CSV 导出
 - 多设备支持：后端订阅 `up/+`，前端下拉切换关注设备
+- 设备级数据保留时长：主页顶栏按设备选择保留 1/3/7/15/30/180 天（默认跟随全局 `RETENTION_DAYS`），保存后自动按新策略清理
 
 ## 部署与启动
 
@@ -60,6 +61,8 @@ web/
 | GET | /api/config     | 字段名/单位/分类/事件类型等展示配置                              |
 | GET | /api/status     | 后端 MQTT 连接状态                                     |
 | GET | /api/devices    | 设备列表（IMEI + 最近上报时间 + 记录数）                        |
+| GET | /api/retention  | 数据保留配置（可选天数、全局默认、各设备自定义值）              |
+| PUT | /api/retention/{imei} | 设置设备保留天数（days 取 RETENTION_OPTIONS 之一或 0=跟随全局），保存后触发清理 |
 | GET | /api/history    | 历史查询：imei / start / end / event / limit / offset |
 | GET | /api/export.csv | CSV 导出（带 BOM，Excel 可直接打开）                        |
 | WS  | /ws             | 实时数据推送；客户端发 `{"imei": "xxx"}` 切换关注设备             |

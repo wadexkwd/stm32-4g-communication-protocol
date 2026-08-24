@@ -281,3 +281,37 @@ tr.clickable { cursor: pointer; }
 .login-box input:focus { border-color: #1a73c6; }
 .login-error { color: #cc3333; font-size: 13px; text-align: center; }
 .login-btn { padding: 10px; font-size: 15px; }
+
+/* 数据保留配置保存反馈 */
+.retention-msg { color: #2e9e44; font-size: 12px; }
+
+/* 设备数据量超限提醒弹窗 */
+.modal-mask {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex; align-items: center; justify-content: center;
+}
+.modal-box {
+    background: #fff; border-radius: 8px; padding: 20px 24px;
+    width: 420px; max-width: 90vw; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+}
+.modal-title { font-size: 16px; font-weight: bold; color: #c0392b; margin-bottom: 10px; }
+.modal-body { color: #444; font-size: 14px; line-height: 1.7; }
+.modal-body p { margin: 4px 0; }
+.size-warn-item { font-weight: bold; color: #1a3c6e; }
+.modal-footer { text-align: right; margin-top: 14px; }
+
+/* 后台监听切换开关 */
+.switch-label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+.switch-label.off { color: #999; }
+.switch {
+    position: relative; width: 34px; height: 18px; border-radius: 9px;
+    background: #ccc; transition: background 0.2s; flex-shrink: 0;
+}
+.switch.on { background: #2e9e44; }
+.switch.disabled { opacity: 0.5; cursor: not-allowed; }
+.switch-knob {
+    position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+    border-radius: 50%; background: #fff; transition: left 0.2s;
+}
+.switch.on .switch-knob { left: 18px; }

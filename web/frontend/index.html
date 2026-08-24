@@ -32,6 +32,25 @@
                     连接设备
                 </button>
                 <button v-else class="btn danger" @click="disconnectDevice">断开连接</button>
+                <label>数据保留:</label>
+                <select v-model="currentRetentionDays" @change="saveRetention" :disabled="!currentImei"
+                        :title="currentImei ? '设置该设备历史数据保留时长，超出部分定期归档后删除' : '请先在下拉列表选择设备'">
+                    <option :value="0">跟随全局（{{ retentionDefaultDays }}天）</option>
+                    <option v-for="d in retentionOptions" :key="d" :value="d">{{ d }} 天</option>
+                </select>
+                <label class="switch-label" :class="{off: !listenEnabled}"
+                       :title="currentImei ? '关闭后后端丢弃该设备上报数据（不入库不推送），可防止历史数据无限增长' : '请先在下拉列表选择设备'">
+                    <span class="switch" :class="{on: listenEnabled, disabled: !currentImei}"
+                          @click="currentImei && toggleListen()">
+                        <span class="switch-knob"></span>
+                    </span>
+                    后台监听{{ listenEnabled ? '开' : '关' }}
+                </label>
+                <span v-if="retentionMsg" class="retention-msg">{{ retentionMsg }}</span>
+                <button class="btn danger" :disabled="!currentImei || clearing" @click="clearDeviceData"
+                        :title="currentImei ? '删除该设备全部历史数据（不可恢复）' : '请先在下拉列表选择设备'">
+                    {{ clearing ? '清除中...' : '清除数据' }}
+                </button>
                 <label>事件类型:</label>
                 <select v-model="eventFilter">
                     <option value="">全部事件</option>
@@ -150,6 +169,22 @@
                 </div>
             </section>
         </main>
+
+        <!-- 单设备数据量超限提醒弹窗 -->
+        <div v-if="sizeWarnVisible" class="modal-mask">
+            <div class="modal-box">
+                <div class="modal-title">⚠ 存储空间提醒</div>
+                <div class="modal-body">
+                    <p>以下设备的历史数据量已超过 1GB，建议导出备份后清除历史数据，或缩短数据保留时长：</p>
+                    <p v-for="d in sizeWarnDevices" :key="d.imei" class="size-warn-item">
+                        {{ d.imei }}：约 {{ (d.est_size_mb / 1024).toFixed(2) }} GB（{{ d.count }} 条）
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn primary" @click="sizeWarnVisible = false">知道了</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="js/charts.js"></script>

@@ -22,6 +22,23 @@ createApp({
         const lastUpdate = ref('');
         const latestValues = reactive({ pressure: null, altitude: null });
 
+        // 数据保留配置（设备级）
+        const retentionOptions = ref([]);      // 可选天数列表
+        const retentionDefaultDays = ref(30);  // 全局默认天数
+        const deviceRetention = reactive({});  // {imei: days}，仅含有自定义配置的设备
+        const currentRetentionDays = ref(0);   // 当前设备选中的值（0=跟随全局）
+        const retentionMsg = ref('');          // 保存反馈提示
+
+        // 设备数据清除与体积提醒
+        const clearing = ref(false);           // 清除按钮进行中状态
+        const sizeWarnVisible = ref(false);    // 体积超限弹窗是否显示
+        const sizeWarnDevices = ref([]);       // 超限设备列表
+        let sizeWarnAcked = false;             // 本次会话是否已提醒过（避免反复弹窗）
+        const DEVICE_SIZE_WARN_MB = 1024;      // 单设备数据量提醒阈值（1GB）
+
+        // 后台监听开关（关闭后后端丢弃该设备数据，不入库不推送）
+        const listenEnabled = ref(true);
+
         const rows = Vue.shallowRef([]);   // 实时数据（新数据置顶）。shallowRef 避免上万字段深层代理开销
         const maxRows = 500;
         let rowKeySeq = 0;
@@ -73,6 +90,7 @@ createApp({
         async function init() {
             await loadConfig();
             await loadDevices();
+            await loadRetention();
             connectWs();
             pollStatus();
         }
@@ -82,12 +100,128 @@ createApp({
             Object.assign(config, await resp.json());
         }
 
+        async function loadRetention() {
+            try {
+                const resp = await apiFetch('/api/retention');
+                const r = await resp.json();
+                retentionOptions.value = r.options || [];
+                retentionDefaultDays.value = r.default_days ?? 30;
+                Object.keys(deviceRetention).forEach(k => delete deviceRetention[k]);
+                Object.assign(deviceRetention, r.devices || {});
+                syncRetentionSelect();
+            } catch (e) { /* 配置加载失败不影响主功能 */ }
+        }
+
+        /** 当前设备的保留天数同步到下拉框 */
+        function syncRetentionSelect() {
+            currentRetentionDays.value = deviceRetention[currentImei.value] ?? 0;
+        }
+
+        /** 当前设备的后台监听状态同步到开关 */
+        function syncListenSwitch() {
+            const dev = devices.value.find(d => d.imei === currentImei.value);
+            listenEnabled.value = dev ? dev.listen_enabled !== false : true;
+        }
+
+        /** 切换后台监听开关并保存 */
+        async function toggleListen() {
+            if (!currentImei.value) return;
+            const target = !listenEnabled.value;
+            const imei = currentImei.value;
+            if (!target && !confirm(`确定关闭设备 ${imei} 的后台监听吗？\n关闭后该设备上报的数据将被后端丢弃（不入库、不推送），历史数据不再增长。`)) {
+                return;
+            }
+            try {
+                const resp = await apiFetch(`/api/devices/${imei}/listen`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: target }),
+                });
+                const result = await resp.json();
+                listenEnabled.value = result.listen_enabled;
+                // 同步设备列表缓存
+                const dev = devices.value.find(d => d.imei === imei);
+                if (dev) dev.listen_enabled = result.listen_enabled;
+                retentionMsg.value = target ? '监听已开启' : '监听已关闭，数据不再入库';
+                setTimeout(() => { retentionMsg.value = ''; }, 4000);
+            } catch (e) {
+                retentionMsg.value = '设置失败';
+                setTimeout(() => { retentionMsg.value = ''; }, 4000);
+            }
+        }
+
+        /** 修改当前设备的保留天数并保存到后端 */
+        async function saveRetention() {
+            if (!currentImei.value) return;
+            const days = currentRetentionDays.value;
+            try {
+                const resp = await apiFetch(`/api/retention/${currentImei.value}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ days }),
+                });
+                const result = await resp.json();
+                if (days) {
+                    deviceRetention[currentImei.value] = days;
+                } else {
+                    delete deviceRetention[currentImei.value];
+                }
+                retentionMsg.value = `已保存（保留 ${result.effective_days} 天），稍后自动清理`;
+                setTimeout(() => { retentionMsg.value = ''; }, 4000);
+            } catch (e) {
+                retentionMsg.value = '保存失败';
+                setTimeout(() => { retentionMsg.value = ''; }, 4000);
+                syncRetentionSelect();
+            }
+        }
+
         async function loadDevices() {
             const resp = await apiFetch('/api/devices');
             devices.value = await resp.json();
             // 当前设备已不在列表中则重置为全部
             if (currentImei.value && !devices.value.some(d => d.imei === currentImei.value)) {
                 currentImei.value = '';
+            }
+            checkDeviceSize();
+            if (currentImei.value) syncListenSwitch();
+        }
+
+        /** 检查各设备数据量是否超限，超限弹窗提醒（每次会话只提醒一次） */
+        function checkDeviceSize() {
+            const oversize = devices.value.filter(d => (d.est_size_mb || 0) > DEVICE_SIZE_WARN_MB);
+            if (oversize.length && !sizeWarnAcked) {
+                sizeWarnDevices.value = oversize;
+                sizeWarnAcked = true;
+                sizeWarnVisible.value = true;
+            }
+        }
+
+        /** 一键清除当前设备的全部历史数据（后端删除后刷新本地展示） */
+        async function clearDeviceData() {
+            if (!currentImei.value || clearing.value) return;
+            const imei = currentImei.value;
+            const dev = devices.value.find(d => d.imei === imei);
+            if (!confirm(`确定清除设备 ${imei} 的全部历史数据吗？\n共 ${dev ? dev.count : '?'} 条，删除后不可恢复！`)) {
+                return;
+            }
+            clearing.value = true;
+            try {
+                const resp = await apiFetch(`/api/devices/${imei}/data`, { method: 'DELETE' });
+                const result = await resp.json();
+                // 清空当前展示的实时数据/曲线/地图
+                rows.value = [];
+                pendingItems = [];
+                ChartManager.clearAll();
+                MapView.reset();
+                retentionMsg.value = `已清除 ${result.deleted_rows} 条数据`;
+                setTimeout(() => { retentionMsg.value = ''; }, 4000);
+                await loadDevices();
+                // 重新预取（此时应无数据）
+                prefill();
+            } catch (e) {
+                alert('清除失败，请稍后重试');
+            } finally {
+                clearing.value = false;
             }
         }
 
@@ -228,6 +362,9 @@ createApp({
             latestValues.pressure = null;
             latestValues.altitude = null;
             syncWatchImei();
+            // 同步该设备的保留配置与监听开关到控件
+            syncRetentionSelect();
+            syncListenSwitch();
             // 预取该设备最近数据，进入页面即有内容
             prefill();
         }
@@ -378,6 +515,10 @@ createApp({
             historyStart, historyEnd, historyEvent, historyRows, historyTotal, historyQueried,
             connectDevice, disconnectDevice,
             onDeviceChange, switchTab, loadDevices, queryHistory, exportCsv, formatCell, goDashboard,
+            retentionOptions, retentionDefaultDays, currentRetentionDays, retentionMsg,
+            loadRetention, saveRetention,
+            clearing, clearDeviceData, sizeWarnVisible, sizeWarnDevices,
+            listenEnabled, toggleListen,
         };
     },
 }).mount('#app');

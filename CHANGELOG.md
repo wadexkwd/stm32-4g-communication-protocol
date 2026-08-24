@@ -3,6 +3,25 @@
 本项目所有显著变更将记录在此文件中。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [未发布] - 2026-08-24
+
+### 新增
+
+- **设备级数据保留时长配置**：
+  - 新增 `device_settings` 表存储每台设备的保留天数（0 = 跟随全局默认 `RETENTION_DAYS`），可选值见 `config.py` 的 `RETENTION_OPTIONS`（1/3/7/15/30/180 天）
+  - 保留策略服务改为逐设备清理：设备级配置优先于全局默认，归档文件按设备命名（`sensor_data_{imei}_{时间戳}.csv.gz`），归档失败仍跳过该设备删除
+  - 清理线程支持 `trigger()` 提前唤醒：前端修改配置后数秒内按新策略执行一次清理，无需等下一个清理周期
+  - 主页顶栏新增「数据保留」下拉框（未选设备时禁用），保存后显示反馈提示
+  - 新增接口：`GET /api/retention`（选项/全局默认/各设备配置）、`PUT /api/retention/{imei}`（设置并立即触发清理，非法值返回 400）
+- **一键清除设备数据**：主页顶栏「清除数据」按钮，二次确认后删除该设备全部历史数据并 VACUUM 回收空间；新增接口 `DELETE /api/devices/{imei}/data`
+- **单设备数据量超限提醒**：设备列表按行数占比估算各设备数据体积（`est_size_mb`），超过 1GB 时主页弹窗提醒（每次会话一次），提示导出备份/清除/缩短保留时长
+- **设备后台监听开关**：主页顶栏切换开关，关闭后 MQTT 上报数据在后端直接丢弃（不入库、不推送），防止长期挂机导致历史数据无限增长；开关状态存 `device_settings.listen_enabled`（含老表自动迁移），MQTT 线程缓存开关并每 30 秒刷新、配置变更即时生效；新增接口 `PUT /api/devices/{imei}/listen`，`GET /api/devices` 增加 `listen_enabled` 字段
+- **服务器迁移至 Linux**：阿里云服务器由 Windows Server 2022 更换为 Ubuntu Server 24.04，mosquitto + Web 后端已重新部署（systemd 管理，代码在 `/opt/dwdl/web`），详见仓库根目录部署记录
+
+### 修复
+
+- `requirements.txt`：`uvicorn` 改为 `uvicorn[standard]`——纯 uvicorn 不含 WebSocket 实现，部署到干净环境时 `/ws` 握手 404、页面实时推送失效
+
 ## [未发布] - 2026-08-21
 
 ### 新增

@@ -29,7 +29,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config import (WEB_HOST, WEB_PORT, FRONTEND_DIR, FIELD_ORDER, FIELD_NAMES,
                     EVENT_TYPES, FIELD_UNITS, FIELD_CATEGORIES, CHARTS,
-                    RETENTION_DAYS, ARCHIVE_ENABLED,
+                    RETENTION_DAYS, RETENTION_OPTIONS, ARCHIVE_ENABLED,
                     WEB_PASSWORD, SESSION_SECRET, SESSION_TTL_HOURS)
 from database import Database
 from mqtt_service import MqttService
@@ -167,8 +167,64 @@ async def api_status():
 
 @app.get("/api/devices")
 async def api_devices():
-    """设备列表（含最近上报时间与记录数）"""
-    return database.get_devices()
+    """设备列表（含最近上报时间、记录数、估算数据体积、后台监听状态）"""
+    devices = database.get_devices()
+    # 估算各设备数据体积：按行数占比分摊数据库文件大小（行宽固定，比例法足够准确）
+    total_rows = sum(d['count'] for d in devices)
+    db_size_mb = (database.get_storage_stats().get('db_size_mb') or 0)
+    disabled = set(database.get_disabled_devices())
+    for d in devices:
+        d['est_size_mb'] = round(db_size_mb * d['count'] / total_rows, 2) if total_rows else 0
+        d['listen_enabled'] = d['imei'] not in disabled
+    return devices
+
+
+@app.put("/api/devices/{imei}/listen")
+async def api_set_listen(imei: str, body: dict = Body(...)):
+    """设置设备后台监听开关（关闭后该设备上报数据直接丢弃，不入库不推送）"""
+    enabled = body.get("enabled")
+    if not isinstance(enabled, bool):
+        raise HTTPException(status_code=400, detail="enabled 必须为布尔值")
+    database.set_device_listen(imei, enabled)
+    # 立即刷新 MQTT 线程的开关缓存，无需等 30 秒自动刷新
+    if mqtt_service:
+        mqtt_service.refresh_disabled()
+    return {"ok": True, "imei": imei, "listen_enabled": enabled}
+
+
+@app.delete("/api/devices/{imei}/data")
+async def api_clear_device_data(imei: str):
+    """一键清除指定设备的全部历史数据（不可恢复，前端有二次确认）"""
+    deleted = database.delete_device_data(imei)
+    if deleted > 0:
+        database.vacuum()
+    return {"ok": True, "imei": imei, "deleted_rows": deleted}
+
+
+@app.get("/api/retention")
+async def api_retention():
+    """数据保留配置：可选天数、全局默认、各设备自定义值"""
+    return {
+        "options": RETENTION_OPTIONS,
+        "default_days": RETENTION_DAYS,
+        "archive_enabled": ARCHIVE_ENABLED,
+        "devices": database.get_device_retentions(),
+    }
+
+
+@app.put("/api/retention/{imei}")
+async def api_set_retention(imei: str, body: dict = Body(...)):
+    """设置设备级数据保留天数（0 = 跟随全局默认），保存后立即触发一次清理"""
+    days = body.get("days")
+    if days not in RETENTION_OPTIONS and days != 0:
+        raise HTTPException(status_code=400,
+                            detail=f"days 必须是 {RETENTION_OPTIONS} 之一，或 0（跟随全局默认）")
+    database.set_device_retention(imei, days)
+    # 提前唤醒清理线程，数秒内按新配置执行（无需等到下一个清理周期）
+    if retention_service:
+        retention_service.trigger()
+    return {"ok": True, "imei": imei, "days": days,
+            "effective_days": days if days else RETENTION_DAYS}
 
 
 @app.get("/api/history")

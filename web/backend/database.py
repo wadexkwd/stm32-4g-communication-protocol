@@ -55,6 +55,20 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_sensor_data_imei_time
                 ON sensor_data (imei, received_time)
             ''')
+            # 设备级配置（保留天数 + 后台监听开关）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS device_settings (
+                    imei TEXT PRIMARY KEY,
+                    retention_days INTEGER NOT NULL DEFAULT 0,
+                    updated_time TEXT,
+                    listen_enabled INTEGER NOT NULL DEFAULT 1
+                )
+            ''')
+            # 兼容已存在的旧设置表：补齐监听开关列
+            cursor.execute("PRAGMA table_info(device_settings)")
+            setting_cols = [row[1] for row in cursor.fetchall()]
+            if 'listen_enabled' not in setting_cols:
+                cursor.execute("ALTER TABLE device_settings ADD COLUMN listen_enabled INTEGER NOT NULL DEFAULT 1")
             conn.commit()
             conn.close()
 
@@ -149,6 +163,17 @@ class Database:
             finally:
                 conn.close()
 
+    def delete_device_data(self, imei):
+        """删除指定设备的全部数据，返回删除行数"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                cursor = conn.execute('DELETE FROM sensor_data WHERE imei = ?', (imei,))
+                conn.commit()
+                return cursor.rowcount
+            finally:
+                conn.close()
+
     def get_latest_by_device(self, imei, limit=1):
         """获取设备最近 N 条数据（用于前端进入页面时的初始展示）"""
         return self.query_data(imei=imei, limit=limit)
@@ -222,26 +247,95 @@ class Database:
             finally:
                 conn.close()
 
-    # ------------------------------------------------------------------ 保留策略支撑
-    def count_before(self, cutoff_time):
-        """统计早于指定时间（含）的记录数"""
+    # ------------------------------------------------------------------ 设备级保留配置
+    def get_device_retentions(self):
+        """获取设备级保留天数配置：{imei: days}（未配置的设备不在返回中）"""
         with self._lock:
             conn = self._connect()
             try:
-                return conn.execute(
-                    'SELECT COUNT(*) FROM sensor_data WHERE received_time < ?',
-                    (cutoff_time,)).fetchone()[0]
+                rows = conn.execute(
+                    'SELECT imei, retention_days FROM device_settings').fetchall()
+                return {row['imei']: row['retention_days'] for row in rows}
             finally:
                 conn.close()
 
-    def iter_rows_before(self, cutoff_time):
-        """流式迭代早于指定时间的记录（逐批 yield，避免大结果集占内存）"""
+    def set_device_retention(self, imei, days):
+        """设置设备级保留天数（0 表示跟随全局默认，删除自定义配置）"""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         with self._lock:
             conn = self._connect()
             try:
-                cursor = conn.execute(
-                    'SELECT * FROM sensor_data WHERE received_time < ? ORDER BY id',
-                    (cutoff_time,))
+                if days:
+                    conn.execute('''
+                        INSERT INTO device_settings (imei, retention_days, updated_time)
+                        VALUES (?, ?, ?)
+                        ON CONFLICT(imei) DO UPDATE
+                        SET retention_days = excluded.retention_days,
+                            updated_time = excluded.updated_time
+                    ''', (imei, days, now))
+                else:
+                    # 0 = 跟随全局：仅重置保留天数（保留行，避免丢失监听开关等其他配置）
+                    conn.execute('UPDATE device_settings SET retention_days = 0, updated_time = ? WHERE imei = ?',
+                                 (now, imei))
+                conn.commit()
+            finally:
+                conn.close()
+
+    def get_disabled_devices(self):
+        """获取已关闭后台监听的设备 IMEI 列表"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    'SELECT imei FROM device_settings WHERE listen_enabled = 0').fetchall()
+                return [row['imei'] for row in rows]
+            finally:
+                conn.close()
+
+    def set_device_listen(self, imei, enabled):
+        """设置设备后台监听开关（关闭后 MQTT 上报数据直接丢弃，不入库不推送）"""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute('''
+                    INSERT INTO device_settings (imei, listen_enabled, updated_time)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(imei) DO UPDATE
+                        SET listen_enabled = excluded.listen_enabled,
+                            updated_time = excluded.updated_time
+                ''', (imei, 1 if enabled else 0, now))
+                conn.commit()
+            finally:
+                conn.close()
+
+    # ------------------------------------------------------------------ 保留策略支撑
+    def count_before(self, cutoff_time, imei=None):
+        """统计早于指定时间（含）的记录数，可限定设备"""
+        sql = 'SELECT COUNT(*) FROM sensor_data WHERE received_time < ?'
+        params = [cutoff_time]
+        if imei:
+            sql += ' AND imei = ?'
+            params.append(imei)
+        with self._lock:
+            conn = self._connect()
+            try:
+                return conn.execute(sql, params).fetchone()[0]
+            finally:
+                conn.close()
+
+    def iter_rows_before(self, cutoff_time, imei=None):
+        """流式迭代早于指定时间的记录（逐批 yield，避免大结果集占内存），可限定设备"""
+        sql = 'SELECT * FROM sensor_data WHERE received_time < ?'
+        params = [cutoff_time]
+        if imei:
+            sql += ' AND imei = ?'
+            params.append(imei)
+        sql += ' ORDER BY id'
+        with self._lock:
+            conn = self._connect()
+            try:
+                cursor = conn.execute(sql, params)
                 while True:
                     batch = cursor.fetchmany(5000)
                     if not batch:
@@ -251,14 +345,17 @@ class Database:
             finally:
                 conn.close()
 
-    def delete_before(self, cutoff_time):
-        """删除早于指定时间的记录，返回删除行数"""
+    def delete_before(self, cutoff_time, imei=None):
+        """删除早于指定时间的记录，返回删除行数，可限定设备"""
+        sql = 'DELETE FROM sensor_data WHERE received_time < ?'
+        params = [cutoff_time]
+        if imei:
+            sql += ' AND imei = ?'
+            params.append(imei)
         with self._lock:
             conn = self._connect()
             try:
-                cursor = conn.execute(
-                    'DELETE FROM sensor_data WHERE received_time < ?',
-                    (cutoff_time,))
+                cursor = conn.execute(sql, params)
                 conn.commit()
                 return cursor.rowcount
             finally:

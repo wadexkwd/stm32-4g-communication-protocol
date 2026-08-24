@@ -13,6 +13,7 @@
 
 import json
 import threading
+import time
 
 import paho.mqtt.client as mqtt
 
@@ -32,9 +33,25 @@ class MqttService(threading.Thread):
         self._stop_event = threading.Event()
         self.status = "未启动"
         self._status_lock = threading.Lock()
+        # 后台监听开关：关闭的设备数据直接丢弃（不入库不推送）。
+        # 缓存 + 每 30 秒从库刷新一次，避免每条消息查库
+        self._disabled = set()
+        self._disabled_checked_at = 0.0
+        self._disabled_lock = threading.Lock()
+
+    def refresh_disabled(self):
+        """立即从库刷新"已关闭监听"设备列表（配置变更后由 Web 层调用，或定时自动刷新）"""
+        try:
+            disabled = set(self.database.get_disabled_devices())
+        except Exception:
+            return
+        with self._disabled_lock:
+            self._disabled = disabled
+            self._disabled_checked_at = time.monotonic()
 
     # ------------------------------------------------------------------ 运行控制
     def run(self):
+        self.refresh_disabled()   # 启动时先加载一次监听开关配置
         while not self._stop_event.is_set():
             try:
                 self._set_status("正在连接MQTT服务器...")
@@ -102,6 +119,10 @@ class MqttService(threading.Thread):
             if not imei:
                 return
 
+            # 该设备已关闭后台监听：直接丢弃（不入库不推送）
+            if not self._is_listening(imei):
+                return
+
             payload = msg.payload.decode('utf-8')
             items = self._parse_payload(payload)
             if not items:
@@ -120,6 +141,19 @@ class MqttService(threading.Thread):
                     pass
         except Exception as e:
             self._set_status(f"消息处理失败: {e}")
+
+    # ------------------------------------------------------------------ 监听开关
+    def _is_listening(self, imei):
+        """设备是否处于监听状态；缓存超过 30 秒自动刷新一次"""
+        with self._disabled_lock:
+            if time.monotonic() - self._disabled_checked_at > 30:
+                refresh = True
+            else:
+                refresh = False
+        if refresh:
+            self.refresh_disabled()
+        with self._disabled_lock:
+            return imei not in self._disabled
 
     # ------------------------------------------------------------------ 消息解析
     @staticmethod

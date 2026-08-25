@@ -82,7 +82,7 @@ async def lifespan(app: FastAPI):
     retention_service.stop()
 
 
-app = FastAPI(title="应急跌落事件监控系统 Web后端", lifespan=lifespan)
+app = FastAPI(title="物联设备开发测试 Web后端", lifespan=lifespan)
 
 
 # =============================================================================

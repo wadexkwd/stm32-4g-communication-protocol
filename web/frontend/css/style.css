@@ -53,6 +53,7 @@ body {
 .btn.danger { background: #c64444; border-color: #c64444; color: #fff; }
 .btn.danger:hover { background: #a83636; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+a.btn { text-decoration: none; color: inherit; }
 
 /* ---------- 标签页 ---------- */
 .tabs {

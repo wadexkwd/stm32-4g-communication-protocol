@@ -92,9 +92,12 @@ def _is_authenticated(request):
     return verify_token(SESSION_SECRET, request.cookies.get(COOKIE_NAME))
 
 
-# 无需登录即可访问的路径（登录页自身 + 前端静态资源，页面数据全部走需认证的 API）
-_PUBLIC_PATHS = ("/login", "/api/login")
+# 无需登录即可访问的路径（门户主页 + 登录页自身 + 前端静态资源，页面数据全部走需认证的 API）
+_PUBLIC_PATHS = ("/", "/portal.html", "/login", "/api/login")
 _PUBLIC_PREFIXES = ("/css/", "/js/", "/vendor/")
+
+# 需要登录的页面（未登录时跳转登录页）
+_PAGE_PATHS = ("/monitor", "/index.html", "/dashboard.html")
 
 
 @app.middleware("http")
@@ -105,7 +108,7 @@ async def auth_middleware(request, call_next):
 
     if not _is_authenticated(request):
         # 页面请求跳转登录页；API 请求返回 401（前端收到后跳登录）
-        if path in ("/", "/index.html", "/dashboard.html"):
+        if path in _PAGE_PATHS:
             return RedirectResponse("/login")
         if path.startswith("/api/"):
             return JSONResponse({"detail": "未登录或会话已过期"}, status_code=401)
@@ -117,11 +120,23 @@ async def cache_control_middleware(request, call_next):
     """html 不缓存（前端改版即时生效）；静态资源带版本号，可安全长缓存 7 天"""
     response = await call_next(request)
     path = request.url.path
-    if path in ("/", "/login") or path.endswith(".html"):
+    if path in ("/", "/monitor", "/login") or path.endswith(".html"):
         response.headers["Cache-Control"] = "no-cache"
     elif path.startswith(_PUBLIC_PREFIXES):
         response.headers["Cache-Control"] = "public, max-age=604800"
     return response
+
+
+@app.get("/", response_class=HTMLResponse)
+async def portal_page():
+    """门户主页：项目导航，无需登录"""
+    return FileResponse(os.path.join(FRONTEND_DIR, "portal.html"))
+
+
+@app.get("/monitor", response_class=HTMLResponse)
+async def monitor_page():
+    """监控系统主页（需登录，未登录由认证中间件跳转登录页）"""
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 
 @app.get("/login", response_class=HTMLResponse)

@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>登录 - 物联设备开发测试</title>
-    <link rel="stylesheet" href="css/style.css?v=20260825b">
-    <script src="vendor/vue.global.prod.js?v=20260825b"></script>
+    <link rel="stylesheet" href="css/style.css?v=20260826a">
+    <script src="vendor/vue.global.prod.js?v=20260826a"></script>
 </head>
 <body class="login-body">
     <div id="app" v-cloak>
@@ -40,7 +40,9 @@
                             body: JSON.stringify({ password: password.value }),
                         });
                         if (resp.ok) {
-                            location.href = '/';
+                            // 支持 ?next=/xxx 登录后回跳原页面，默认进入监控系统
+                            const next = new URLSearchParams(location.search).get('next');
+                            location.href = (next && next.startsWith('/')) ? next : '/monitor';
                             return;
                         }
                         const data = await resp.json().catch(() => ({}));

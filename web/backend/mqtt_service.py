@@ -54,10 +54,10 @@ class MqttService(threading.Thread):
         self.refresh_disabled()   # 启动时先加载一次监听开关配置
         while not self._stop_event.is_set():
             try:
-                self._set_status("正在连接MQTT服务器...")
+                self._set_status("正在连接数据接收服务...")
                 self._connect_and_loop()
             except Exception as e:
-                self._set_status(f"MQTT连接失败: {e}，5秒后重试")
+                self._set_status(f"数据接收连接失败（{e}），5秒后重试")
                 self._stop_event.wait(5)
 
     def stop(self):
@@ -102,14 +102,14 @@ class MqttService(threading.Thread):
             self.connected = True
             topic = f"{MQTT_TOPIC_UP_PREFIX}+"
             client.subscribe(topic)
-            self._set_status(f"MQTT已连接，订阅主题: {topic}")
+            self._set_status("数据接收正常（后台监听全部设备上报）")
         else:
             self.connected = False
-            self._set_status(f"MQTT连接失败，错误码: {rc}")
+            self._set_status(f"数据接收连接失败（错误码 {rc}）")
 
     def _on_disconnect(self, client, userdata, rc, properties=None, reason_code=None):
         self.connected = False
-        self._set_status("MQTT连接断开，正在重连...")
+        self._set_status("数据接收已断开，正在重连...")
 
     def _on_message(self, client, userdata, msg):
         """消息接收回调：解析 -> 入库 -> 通知 Web 层"""

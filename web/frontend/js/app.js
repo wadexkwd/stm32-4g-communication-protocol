@@ -51,6 +51,36 @@ createApp({
         const historyTotal = ref(null);
         const historyQueried = ref(false);
 
+        // 设备日志（关键事件：连接/断开、上电、异常、服务故障）
+        const logRows = ref([]);
+        const LOG_EVENT_NAMES = {
+            DEVICE_MQTT_CONNECTED: '设备连接',
+            DEVICE_MQTT_DISCONNECTED: '设备断开',
+            POWER_ON: '上电/重启',
+            SENSOR_REPORT_TIMEOUT: '数据超时告警',
+            CONFIG_REPLY: '配置回复',
+            RESET_REPLY: '复位回复',
+            MQTT_SERVICE: 'MQTT 服务',
+        };
+        const LOG_LEVELS = {
+            info:  { name: '正常', cls: 'tag tag-online' },
+            warn:  { name: '警告', cls: 'tag tag-warn' },
+            error: { name: '错误', cls: 'tag tag-alarm' },
+        };
+        function logEventName(ev) { return LOG_EVENT_NAMES[ev] || config.eventTypes[ev] || ev; }
+        function logLevelName(lv) { return (LOG_LEVELS[lv] || {}).name || lv; }
+        function logLevelClass(lv) { return (LOG_LEVELS[lv] || {}).cls || 'tag tag-offline'; }
+
+        async function loadLogs() {
+            try {
+                const params = new URLSearchParams({ limit: '300' });
+                if (currentImei.value) params.set('imei', currentImei.value);
+                const resp = await apiFetch(`/api/device_logs?${params}`);
+                const result = await resp.json();
+                logRows.value = result.rows || [];
+            } catch (e) { /* 日志加载失败不影响其他功能 */ }
+        }
+
         const tabs = [
             { key: 'overview', name: '数据总览' },
             { key: 'accel', name: '加速度' },
@@ -59,6 +89,7 @@ createApp({
             { key: 'env', name: '环境' },
             { key: 'location', name: '位置' },
             { key: 'history', name: '历史查询' },
+            { key: 'devlog', name: '设备日志' },
         ];
 
         // 图表定义：tab key -> [chartKey, elId, fields]
@@ -365,6 +396,8 @@ createApp({
             // 同步该设备的保留配置与监听开关到控件
             syncRetentionSelect();
             syncListenSwitch();
+            // 设备日志跟随设备筛选切换
+            loadLogs();
             // 预取该设备最近数据，进入页面即有内容
             prefill();
         }
@@ -402,6 +435,8 @@ createApp({
 
         function switchTab(key) {
             activeTab.value = key;
+            // 设备日志：切入时立即加载一次
+            if (key === 'devlog') loadLogs();
             // 图表/地图容器从 display:none 变可见后需要重算尺寸
             requestAnimationFrame(() => {
                 // 切回数据总览：补触发表格渲染（其他 Tab 期间数据只写数组没重绘）
@@ -506,6 +541,10 @@ createApp({
             init();
             // UI 统一节流刷新
             setInterval(flushPending, UI_FLUSH_MS);
+            // 设备日志：标签页激活期间每 5 秒拉取一次
+            setInterval(() => {
+                if (activeTab.value === 'devlog') loadLogs();
+            }, 5000);
         });
 
         return {
@@ -513,6 +552,7 @@ createApp({
             wsConnected, mqttStatus, lastUpdate, latestValues,
             filteredRows, maxRows,
             historyStart, historyEnd, historyEvent, historyRows, historyTotal, historyQueried,
+            logRows, loadLogs, logEventName, logLevelName, logLevelClass,
             connectDevice, disconnectDevice,
             onDeviceChange, switchTab, loadDevices, queryHistory, exportCsv, formatCell, goDashboard,
             retentionOptions, retentionDefaultDays, currentRetentionDays, retentionMsg,

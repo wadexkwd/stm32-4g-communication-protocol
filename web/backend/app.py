@@ -254,6 +254,15 @@ async def api_set_retention(imei: str, body: dict = Body(...)):
             "effective_days": days if days else RETENTION_DAYS}
 
 
+@app.get("/api/device_logs")
+async def api_device_logs(
+    imei: str = Query(None, description="设备IMEI，为空则查全部（含服务级日志）"),
+    limit: int = Query(200, ge=1, le=2000),
+):
+    """设备日志：MQTT连接/断开、上电、异常事件、服务故障等关键事件"""
+    return {"rows": database.query_device_logs(imei=imei, limit=limit)}
+
+
 @app.get("/api/history")
 async def api_history(
     imei: str = Query(None, description="设备IMEI，为空则查全部"),

@@ -55,6 +55,14 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_sensor_data_imei_time
                 ON sensor_data (imei, received_time)
             ''')
+            # 设备日志：只记录关键事件（MQTT连接/断开、上电、异常事件、服务故障），正常传感器数据不入
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS device_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    time TEXT, imei TEXT, level TEXT, event TEXT, detail TEXT
+                )
+            ''')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_device_logs_time ON device_logs (time)')
             # 设备级配置（保留天数 + 后台监听开关）
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS device_settings (
@@ -244,6 +252,54 @@ class Database:
                 for row in rows:
                     result.setdefault(row['hour'], {})[row['event']] = row['cnt']
                 return result
+            finally:
+                conn.close()
+
+    # ------------------------------------------------------------------ 设备日志
+    # 级别：info 正常事件 / warn 需关注 / error 故障；imei 为空表示服务级日志
+    def save_device_log(self, imei, level, event, detail):
+        """写入一条设备/服务日志"""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        with self._lock:
+            conn = self._connect()
+            try:
+                conn.execute(
+                    'INSERT INTO device_logs (time, imei, level, event, detail) VALUES (?, ?, ?, ?, ?)',
+                    (now, imei or '', level, event, detail))
+                conn.commit()
+            finally:
+                conn.close()
+
+    def query_device_logs(self, imei=None, limit=200):
+        """查询日志（按时间倒序），可限定设备"""
+        sql = 'SELECT * FROM device_logs'
+        params = []
+        if imei:
+            sql += ' WHERE imei = ?'
+            params.append(imei)
+        sql += ' ORDER BY id DESC LIMIT ?'
+        params.append(limit)
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(sql, params).fetchall()
+                return [dict(row) for row in rows]
+            finally:
+                conn.close()
+
+    def prune_device_logs(self, keep=10000):
+        """日志只保留最近 keep 条，防止无限增长"""
+        with self._lock:
+            conn = self._connect()
+            try:
+                total = conn.execute('SELECT COUNT(*) FROM device_logs').fetchone()[0]
+                if total > keep:
+                    conn.execute('''
+                        DELETE FROM device_logs WHERE id <= (
+                            SELECT id FROM device_logs ORDER BY id DESC LIMIT 1 OFFSET ?
+                        )
+                    ''', (keep,))
+                    conn.commit()
             finally:
                 conn.close()
 

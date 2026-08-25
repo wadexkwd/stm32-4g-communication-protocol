@@ -253,6 +253,7 @@ body.dash-body #app { height: 100vh; display: flex; flex-direction: column; }
 .tag-online { background: #e2f5e6; color: #2e9e44; }
 .tag-offline { background: #f0f0f0; color: #999; }
 .tag-alarm { background: #fdeaea; color: #cc3333; font-weight: bold; }
+.tag-warn { background: #fdf6e3; color: #b8860b; font-weight: bold; }
 tr.clickable { cursor: pointer; }
 
 /* ---------- 登录页 ---------- */

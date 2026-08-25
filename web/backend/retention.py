@@ -66,6 +66,9 @@ class RetentionService(threading.Thread):
                   'archived_file': None, 'deleted_rows': 0, 'error': None,
                   'devices': []}
 
+        # 设备日志限量保留（与数据保留策略无关，始终执行，防止日志无限增长）
+        self.database.prune_device_logs()
+
         # 每台设备的生效保留天数：设备级配置优先，否则用全局默认
         settings = self.database.get_device_retentions()
         devices = [d['imei'] for d in self.database.get_devices()]

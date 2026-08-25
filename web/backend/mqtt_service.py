@@ -12,6 +12,7 @@
 """
 
 import json
+import re
 import threading
 import time
 
@@ -19,6 +20,15 @@ import paho.mqtt.client as mqtt
 
 from config import (MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD,
                     MQTT_CLIENT_ID, MQTT_TOPIC_UP_PREFIX)
+
+# ---- 设备日志相关 ----
+# broker 系统日志主题（需在 mosquitto 配置 log_dest topic 才会发布客户端连接/断开消息）
+_SYS_LOG_PREFIX = '$SYS/broker/log/'
+# 设备客户端 ID 即 IMEI（纯数字），用于从 broker 日志中识别设备、排除工具类客户端
+_DEVICE_ID_RE = re.compile(r'^\d{10,}$')
+_RE_CLIENT_CONNECTED = re.compile(r"New client connected from \S+ as (\S+)")
+_RE_CLIENT_DISCONNECTED = re.compile(r"Client (\S+) disconnected")
+_RE_CLIENT_CLOSED = re.compile(r"Client (\S+) closed its connection")
 
 
 class MqttService(threading.Thread):
@@ -58,6 +68,7 @@ class MqttService(threading.Thread):
                 self._connect_and_loop()
             except Exception as e:
                 self._set_status(f"数据接收连接失败（{e}），5秒后重试")
+                self._log('', 'error', 'MQTT_SERVICE', f'后端数据接收连接失败（{e}），5秒后重试')
                 self._stop_event.wait(5)
 
     def stop(self):
@@ -101,19 +112,31 @@ class MqttService(threading.Thread):
         if rc == 0:
             self.connected = True
             topic = f"{MQTT_TOPIC_UP_PREFIX}+"
-            client.subscribe(topic)
+            # 同时订阅 broker 系统日志，用于记录设备连接/断开 MQTT 的事件
+            client.subscribe([(topic, 0), (_SYS_LOG_PREFIX + '#', 0)])
             self._set_status("数据接收正常（后台监听全部设备上报）")
         else:
             self.connected = False
             self._set_status(f"数据接收连接失败（错误码 {rc}）")
+            self._log('', 'error', 'MQTT_SERVICE', f'后端连接 MQTT 服务器失败（错误码 {rc}）')
 
     def _on_disconnect(self, client, userdata, rc, properties=None, reason_code=None):
         self.connected = False
         self._set_status("数据接收已断开，正在重连...")
+        # rc/reason_code 为 0 表示主动断开（服务停止），不记录；其余为异常掉线
+        normal = (rc == 0) or (reason_code is not None and getattr(reason_code, 'value', 1) == 0)
+        if not normal:
+            reason = getattr(reason_code, 'name', None) or f'码 {rc}'
+            self._log('', 'warn', 'MQTT_SERVICE', f'后端与 MQTT 服务器异常断开（{reason}），自动重连中')
 
     def _on_message(self, client, userdata, msg):
         """消息接收回调：解析 -> 入库 -> 通知 Web 层"""
         try:
+            # broker 系统日志（$SYS/broker/log/...）：识别设备连接/断开
+            if msg.topic.startswith(_SYS_LOG_PREFIX):
+                self._handle_broker_log(msg.payload.decode('utf-8', 'replace'))
+                return
+
             # 从主题提取 IMEI（up/{imei}）
             imei = msg.topic[len(MQTT_TOPIC_UP_PREFIX):] if msg.topic.startswith(MQTT_TOPIC_UP_PREFIX) else msg.topic
             if not imei:
@@ -128,11 +151,15 @@ class MqttService(threading.Thread):
             if not items:
                 return
 
+            # 关键事件写入设备日志（正常传感器数据与周期心跳不记录）
+            self._log_device_events(imei, items)
+
             # 入库（失败不阻断广播）
             try:
                 self.database.save_data(items, imei)
             except Exception as e:
                 self._set_status(f"数据入库失败: {e}")
+                self._log('', 'error', 'MQTT_SERVICE', f'数据入库失败: {e}')
 
             if self.on_data:
                 try:
@@ -141,6 +168,68 @@ class MqttService(threading.Thread):
                     pass
         except Exception as e:
             self._set_status(f"消息处理失败: {e}")
+
+    # ------------------------------------------------------------------ 设备日志
+    def _log(self, imei, level, event, detail):
+        """写一条设备/服务日志（失败只更新状态，不影响消息处理）"""
+        try:
+            self.database.save_device_log(imei, level, event, detail)
+        except Exception as e:
+            self._set_status(f"日志写入失败: {e}")
+
+    def _log_device_events(self, imei, items):
+        """把上报数据中的关键事件（上电/超时/配置回复等）写入设备日志
+
+        正常传感器数据（SENSOR_DATA）与周期心跳（HEARTBEAT）不记录。
+        """
+        for item in items:
+            event = item.get('event', '')
+            if not event or event in ('SENSOR_DATA', 'HEARTBEAT'):
+                continue
+            if event == 'POWER_ON':
+                version = item.get('version', '')
+                self._log(imei, 'info', 'POWER_ON',
+                          '设备上电/重启' + (f'（应用版本 {version}）' if version else ''))
+            elif event == 'SENSOR_REPORT_TIMEOUT':
+                self._log(imei, 'warn', 'SENSOR_REPORT_TIMEOUT',
+                          item.get('description') or '超过设定时间未收到传感器数据')
+            elif event == 'CONFIG_REPLY':
+                self._log(imei, 'info', 'CONFIG_REPLY',
+                          f"采样间隔 {item.get('sample_interval')}s / 上传间隔 {item.get('upload_interval')}s / 数据格式 {item.get('data_format')}")
+            elif event == 'RESET_REPLY':
+                self._log(imei, 'info', 'RESET_REPLY', f"复位命令已执行（状态 {item.get('reset_status')}）")
+            else:
+                # 未识别的事件类型：原样记录，便于排查新增事件
+                desc = item.get('description', '')
+                self._log(imei, 'info', event, desc or '收到未分类事件')
+
+    def _handle_broker_log(self, line):
+        """解析 mosquitto 系统日志行，记录设备连接/断开 MQTT 的事件
+
+        设备的 MQTT 客户端 ID 即 IMEI（纯数字），据此过滤出设备、
+        排除后端自身与调试工具等非设备客户端。
+        """
+        try:
+            m = _RE_CLIENT_CONNECTED.search(line)
+            if m:
+                cid = m.group(1)
+                if cid != MQTT_CLIENT_ID and _DEVICE_ID_RE.match(cid):
+                    self._log(cid, 'info', 'DEVICE_MQTT_CONNECTED', '设备连接 MQTT 服务器')
+                return
+            m = _RE_CLIENT_DISCONNECTED.search(line)
+            if m:
+                cid = m.group(1)
+                if cid != MQTT_CLIENT_ID and _DEVICE_ID_RE.match(cid):
+                    self._log(cid, 'info', 'DEVICE_MQTT_DISCONNECTED', '设备正常断开（发出断开报文）')
+                return
+            m = _RE_CLIENT_CLOSED.search(line)
+            if m:
+                cid = m.group(1)
+                if cid != MQTT_CLIENT_ID and _DEVICE_ID_RE.match(cid):
+                    self._log(cid, 'warn', 'DEVICE_MQTT_DISCONNECTED',
+                              '设备异常断开（未发断开报文，可能断电/断网/信号丢失）')
+        except Exception:
+            pass    # 日志解析失败不影响主流程
 
     # ------------------------------------------------------------------ 监听开关
     def _is_listening(self, imei):

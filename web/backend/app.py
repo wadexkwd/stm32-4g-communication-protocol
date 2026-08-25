@@ -112,6 +112,18 @@ async def auth_middleware(request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def cache_control_middleware(request, call_next):
+    """html 不缓存（前端改版即时生效）；静态资源带版本号，可安全长缓存 7 天"""
+    response = await call_next(request)
+    path = request.url.path
+    if path in ("/", "/login") or path.endswith(".html"):
+        response.headers["Cache-Control"] = "no-cache"
+    elif path.startswith(_PUBLIC_PREFIXES):
+        response.headers["Cache-Control"] = "public, max-age=604800"
+    return response
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
     """登录页（登录后跳转主页）"""

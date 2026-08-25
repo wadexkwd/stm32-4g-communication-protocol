@@ -206,7 +206,10 @@ td.empty { text-align: center; color: #aaa; padding: 40px 0; }
 .history-count { color: #888; font-size: 12px; }
 
 /* ---------- 数据看板 ---------- */
-.dash-content { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+/* ---------- 数据看板 ---------- */
+/* 看板铺满视口：#app 占满 100vh，主区 flex:1 吃掉剩余空间，表格/图表随地图同步伸展 */
+body.dash-body #app { height: 100vh; display: flex; flex-direction: column; }
+.dash-content { padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
 .refresh-hint { color: #999; font-size: 12px; }
 
 .dash-cards { display: flex; gap: 12px; flex-wrap: wrap; }
@@ -224,12 +227,12 @@ td.empty { text-align: center; color: #aaa; padding: 40px 0; }
 .dash-card .card-name { color: #888; font-size: 13px; }
 .dash-card .card-value { font-size: 30px; font-weight: bold; font-family: Consolas, monospace; }
 
-.dash-main { display: flex; gap: 12px; flex: 1; min-height: 420px; }
-.dash-map-wrap { flex: 1.4; display: flex; flex-direction: column; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; }
-.dash-map { flex: 1; min-height: 360px; border: 1px solid #eee; border-radius: 4px; }
-.dash-table-wrap { flex: 1; display: flex; flex-direction: column; }
-.dash-table-inner { flex: 1; min-height: 200px; max-height: 260px; }
-.dash-chart { height: 180px; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; }
+.dash-main { display: flex; gap: 12px; flex: 1; min-height: 340px; }
+.dash-map-wrap { flex: 1.4; display: flex; flex-direction: column; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; min-width: 0; }
+.dash-map { flex: 1; min-height: 240px; border: 1px solid #eee; border-radius: 4px; }
+.dash-table-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.dash-table-inner { flex: 1; min-height: 140px; }   /* 高度跟随右列伸展，行多时内部滚动 */
+.dash-chart { flex: 0 1 200px; min-height: 150px; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; }
 
 .panel-title {
     font-size: 13px; font-weight: bold; color: #445;
